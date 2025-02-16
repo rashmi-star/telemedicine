@@ -11,4 +11,41 @@ MedGuide is an AI-powered medical assistance platform that helps users analyze s
 - 🔒 **Secure Data Handling**: All medical data is handled with strict privacy measures
 - 📊 **Real-time Processing**: Instant feedback and analysis of user inputs
 
-Note: This tool is for informational purposes only and should not replace professional medical advice. 
+## Technology Stack
+
+- ⚛️ **Frontend**: React with TypeScript
+- 🎨 **Styling**: Tailwind CSS for modern UI
+- 🔧 **Build Tool**: Vite for fast development
+- 🗄️ **Database**: Supabase for secure data storage
+- 🧠 **AI/ML**: TensorFlow.js for predictions
+- 🔄 **API**: Custom NLP processors for symptom analysis
+
+## Getting Started
+
+1. **Clone the repository**
+```bash
+git clone https://github.com/rashmi-star/MedGuide.git
+cd MedGuide
+```
+
+2. **Install dependencies**
+```bash
+npm install
+```
+
+3. **Start development server**
+```bash
+npm run dev
+```
+The app will be available at `http://localhost:5173` (or next available port)
+
+## Project Structure
+```
+project/
+├── src/               # Source code
+├── supabase/          # Database config
+├── dist/             # Build output
+└── public/           # Static assets
+```
+
+⚠️ **Medical Disclaimer**: This tool is for informational purposes only and should not replace professional medical advice. Always consult with qualified healthcare providers for medical decisions. 
