@@ -1,33 +1,33 @@
 # MedGuide
 
-MedGuide is a smart healthcare assistant that helps you understand your medical symptoms through AI technology. It takes your symptoms as input in simple everyday language and matches them against a vast medical database to provide initial health insights. The platform aims to make preliminary health information more accessible while ensuring all sensitive health data remains secure and private.
+MedGuide is an AI-driven healthcare assistant that helps users understand their medical symptoms in simple, everyday language. By analyzing symptoms against a vast medical database, MedGuide provides initial health insights and recommends specialist doctors based on the user's location (pincode).
 
 ## Core Features
 
 - 🔍 **Smart Symptom Analysis**: 
-  - Natural language input processing
-  - Advanced symptom matching algorithms
-  - Real-time analysis feedback
+  - Natural language symptom description
+  - AI-powered symptom matching
+  - Real-time health insights
 
-- 🏥 **Medical Dataset Integration**: 
-  - Comprehensive medical database
-  - ICD-10 code integration
-  - Verified source information
+- 🗺️ **Doctor Recommendations**: 
+  - Location-based specialist finding
+  - Pincode-specific search
+  - Specialist matching based on symptoms
 
-- 🤖 **ML-Powered Predictions**: 
-  - TensorFlow.js machine learning models
-  - Symptom-condition correlation
-  - Probability-based insights
+- 🤖 **AI-Powered Diagnosis**: 
+  - Advanced symptom analysis
+  - Condition probability assessment
+  - Specialist type suggestions
 
-- 📱 **Interactive Interface**: 
-  - Symptom data entry form
-  - Medical dataset uploader
-  - Interactive mapping visualization
+- 📱 **User-Friendly Interface**: 
+  - Simple symptom input
+  - Location-based services
+  - Clear health insights display
 
-- 🔒 **Secure Infrastructure**: 
-  - Supabase backend integration
-  - Encrypted data transmission
+- 🔒 **Privacy & Security**: 
+  - Secure data handling
   - Private health information protection
+  - Encrypted user data
 
 ## Development Setup
 
