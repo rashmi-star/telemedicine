@@ -1,8 +1,6 @@
 # MedGuide
 
-MedGuide is your AI-powered health companion that helps analyze symptoms and provide preliminary medical guidance.
-Using advanced machine learning and a comprehensive medical database, it offers real-time health insights and condition predictions.
-Built with security and accuracy in mind, it processes natural language inputs to help users better understand their health concerns.
+MedGuide is a smart healthcare assistant that helps you understand your medical symptoms through AI technology. It takes your symptoms as input in simple everyday language and matches them against a vast medical database to provide initial health insights. The platform aims to make preliminary health information more accessible while ensuring all sensitive health data remains secure and private.
 
 ## Core Features
 
