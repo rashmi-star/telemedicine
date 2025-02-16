@@ -1,51 +1,88 @@
 # MedGuide
 
-MedGuide is an AI-powered medical assistance platform that helps users analyze symptoms and get preliminary medical guidance. The platform uses advanced machine learning algorithms to process user symptoms and provide relevant medical information.
+MedGuide is an AI-powered medical assistance platform that helps users analyze symptoms and get preliminary medical guidance. The platform combines machine learning, natural language processing, and medical datasets to provide intelligent health insights.
 
-## What it does
+## Core Features
 
-- 🔍 **Smart Symptom Analysis**: Enter your symptoms in natural language and get AI-powered analysis
-- 🏥 **Medical Dataset Integration**: Access comprehensive medical information from verified sources
-- 🤖 **ML-Powered Predictions**: Get preliminary insights about possible conditions
-- 📱 **User-Friendly Interface**: Simple and intuitive design for easy navigation
-- 🔒 **Secure Data Handling**: All medical data is handled with strict privacy measures
-- 📊 **Real-time Processing**: Instant feedback and analysis of user inputs
+- 🔍 **Smart Symptom Analysis**: 
+  - Natural language input processing
+  - Advanced symptom matching algorithms
+  - Real-time analysis feedback
 
-## Technology Stack
+- 🏥 **Medical Dataset Integration**: 
+  - Comprehensive medical database
+  - ICD-10 code integration
+  - Verified source information
 
-- ⚛️ **Frontend**: React with TypeScript
-- 🎨 **Styling**: Tailwind CSS for modern UI
-- 🔧 **Build Tool**: Vite for fast development
-- 🗄️ **Database**: Supabase for secure data storage
-- 🧠 **AI/ML**: TensorFlow.js for predictions
-- 🔄 **API**: Custom NLP processors for symptom analysis
+- 🤖 **ML-Powered Predictions**: 
+  - TensorFlow.js machine learning models
+  - Symptom-condition correlation
+  - Probability-based insights
 
-## Getting Started
+- 📱 **Interactive Interface**: 
+  - Symptom data entry form
+  - Medical dataset uploader
+  - Interactive mapping visualization
 
-1. **Clone the repository**
-```bash
-git clone https://github.com/rashmi-star/MedGuide.git
-cd MedGuide
-```
+- 🔒 **Secure Infrastructure**: 
+  - Supabase backend integration
+  - Encrypted data transmission
+  - Private health information protection
 
-2. **Install dependencies**
-```bash
-npm install
-```
+## Technical Architecture
 
-3. **Start development server**
-```bash
-npm run dev
-```
-The app will be available at `http://localhost:5173` (or next available port)
+### Frontend (⚛️ React + TypeScript)
+- Modern React components with TypeScript
+- Tailwind CSS for responsive design
+- Vite for optimized development
+
+### Backend (🗄️ Supabase)
+- Secure data storage
+- Real-time data synchronization
+- User authentication
+
+### AI/ML Components (🧠)
+- Custom NLP processor for symptom analysis
+- TensorFlow.js for prediction models
+- Symptom matching algorithms
+
+### Data Processing (📊)
+- Medical dataset management
+- ICD-10 code processing
+- Real-time data analysis
 
 ## Project Structure
 ```
 project/
-├── src/               # Source code
-├── supabase/          # Database config
-├── dist/             # Build output
-└── public/           # Static assets
+├── src/
+│   ├── components/          # React UI components
+│   │   ├── DataEntryForm   # Symptom input interface
+│   │   ├── DatasetUploader # Medical data management
+│   │   └── Map            # Visualization component
+│   ├── utils/              # Core functionality
+│   │   ├── mlModel        # Machine learning implementation
+│   │   ├── nlpProcessor   # Natural language processing
+│   │   ├── symptomMatcher # Symptom analysis
+│   │   └── DataProcessor  # Data handling
+│   └── data/              # Dataset management
+├── supabase/              # Database configuration
+└── public/               # Static assets
 ```
 
-⚠️ **Medical Disclaimer**: This tool is for informational purposes only and should not replace professional medical advice. Always consult with qualified healthcare providers for medical decisions. 
+## Getting Started
+
+1. **Clone and Setup**
+```bash
+git clone https://github.com/rashmi-star/MedGuide.git
+cd MedGuide
+npm install
+```
+
+2. **Start Development Server**
+```bash
+npm run dev
+```
+Access the application at `http://localhost:5173` (or next available port)
+
+⚠️ **Important Medical Disclaimer**: 
+This tool is designed for informational purposes only and should not be used as a substitute for professional medical advice, diagnosis, or treatment. Always seek the guidance of qualified healthcare providers with any questions regarding your medical condition. 
