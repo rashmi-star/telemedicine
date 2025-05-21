@@ -3,6 +3,8 @@ import { getLlamaCompletion } from '../utils/llamaApi';
 import { loadMedicalDataset } from '../utils/csvLoader';
 import { SpecialistList } from './SpecialistList';
 import HospitalDisplay from './HospitalDisplay';
+import { useMedicationData, getMedicationRecommendations, Medication } from '../utils/medicationLoader';
+import MedicationRecommendations from './MedicationRecommendations';
 
 // Define the different types of messages
 type MessageSender = 'bot' | 'user';
@@ -26,6 +28,7 @@ type ConversationStep =
   | 'askBloodPressure'
   | 'askCholesterol'
   | 'askLocation' 
+  | 'askLocationDetails' 
   | 'processing' 
   | 'showResults';
 
@@ -77,6 +80,15 @@ export const ChatInterface: React.FC = () => {
   // Track if hospital data has been shown
   const [hospitalDataShown, setHospitalDataShown] = useState(false);
   
+  // Medication recommendations
+  const [medicationRecommendations, setMedicationRecommendations] = useState<{
+    medications: Medication[],
+    warnings: string[]
+  }>({ medications: [], warnings: [] });
+  
+  // Load medication data
+  const { medicationData, loading: medicationsLoading } = useMedicationData();
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom of messages
@@ -116,13 +128,13 @@ export const ChatInterface: React.FC = () => {
         const newMessages = [
           {
             id: `greeting-1-${Date.now()}`,
-            text: "👋 Hi there! I'm your MedGuide assistant. I can help you find appropriate medical specialists based on your symptoms.",
+            text: "👋 Hi there! I'm your MedGuide telemedicine assistant. I can suggest appropriate first aid medications based on your symptoms and help you find healthcare specialists.",
             sender: 'bot' as const,
             timestamp: new Date()
           },
           {
             id: `greeting-2-${Date.now() + 100}`,
-            text: "Please describe your symptoms so I can better understand your situation.",
+            text: "Please describe your symptoms so I can suggest appropriate first aid medications and medical specialists.",
             sender: 'bot' as const,
             timestamp: new Date(Date.now() + 100)
           }
@@ -301,12 +313,40 @@ export const ChatInterface: React.FC = () => {
         setUserData(prev => ({ ...prev, cholesterolLevel: input }));
         setTimeout(() => {
           setIsTyping(false);
-          addBotMessage("What's your location? Please enter your pincode or ZIP code (like 91766 or 110001) so I can find real-time data about healthcare facilities near you.");
+          addBotMessage("Would you like me to suggest safe first aid medications based on your symptoms? Type 'yes' to get medication suggestions or 'more' if you'd also like to see nearby healthcare facilities.");
           setCurrentStep('askLocation');
         }, 1000);
         break;
 
       case 'askLocation':
+        // New flow with optional location
+        if (input.toLowerCase() === 'yes' || input.toLowerCase() === 'y') {
+          // User only wants medication recommendations
+          setUserData(prev => ({ ...prev, location: '' }));
+          setIsTyping(false);
+          addBotMessage("I'll analyze your symptoms and suggest some safe first aid medications...");
+          setCurrentStep('processing');
+          await analyzeSymptoms(false); // false indicates we don't need to show facilities
+        } 
+        else if (input.toLowerCase() === 'more' || input.toLowerCase() === 'm') {
+          // User wants both medications and facilities, ask for location
+          setTimeout(() => {
+            setIsTyping(false);
+            addBotMessage("Great! What's your location? Please enter your pincode or ZIP code (like 91766 or 110001) so I can find real-time data about healthcare facilities near you.");
+            setCurrentStep('askLocationDetails');
+          }, 1000);
+        }
+        else {
+          // Default to just medication recommendations if the response isn't clear
+          setTimeout(() => {
+            setIsTyping(false);
+            addBotMessage("I'll analyze your symptoms and suggest some safe first aid medications. If you'd like to see nearby healthcare facilities, please type 'more' instead.");
+          }, 1000);
+          return;
+        }
+        break;
+
+      case 'askLocationDetails':
         // Validate that input is a reasonable pincode format
         const isPincode = /^\d{5,6}$/.test(input);
         
@@ -322,13 +362,13 @@ export const ChatInterface: React.FC = () => {
         setIsTyping(false);
         addBotMessage(`Thank you for providing your pincode (${input}). I'll now search for real-time data about healthcare facilities near you and analyze your symptoms...`);
         setCurrentStep('processing');
-        await analyzeSymptoms();
+        await analyzeSymptoms(true); // true indicates we should show facilities
         break;
     }
   };
 
   // Analyze symptoms using Llama and the medical dataset with enhanced data
-  const analyzeSymptoms = async () => {
+  const analyzeSymptoms = async (showFacilities: boolean) => {
     setIsLoading(true);
     try {
       // Load the medical dataset
@@ -394,6 +434,119 @@ export const ChatInterface: React.FC = () => {
         return match;
       }).slice(0, 10); // Limit to 10 rows for prompt size
       
+      // Get medication recommendations
+      if (medicationData) {
+        console.log("🔍 About to get medication recommendations for symptoms:", userData.symptoms);
+        
+        // Check specific symptom keywords to ensure we're matching
+        const commonSymptoms = [
+          // Pain-related terms
+          "headache", "head ache", "head pain", 
+          "fever", "high temperature", "feeling hot", "feverish",
+          "cough", "coughing", "dry cough", "productive cough",
+          "cold", "common cold", "head cold", "chest cold",
+          "flu", "influenza", "flu-like",
+          "pain", "ache", "soreness", "discomfort", "hurt", "hurting",
+          "body ache", "body pain", "muscle ache", "muscle pain",
+          "joint pain", "joint ache", "arthritis pain",
+          "back pain", "backache", "lower back", "upper back",
+          
+          // Digestive terms
+          "stomach", "stomachache", "stomach pain", "tummy", "abdomen", "abdominal",
+          "nausea", "nauseated", "feeling sick", "queasy",
+          "vomiting", "throwing up", "vomit", "puking",
+          "diarrhea", "loose stool", "watery stool", "frequent bowel",
+          "constipation", "hard stool", "difficulty passing stool",
+          "indigestion", "heartburn", "acid reflux", "stomach acid",
+          "gas", "bloating", "flatulence", "bloated",
+          
+          // Respiratory terms
+          "throat", "sore throat", "throat pain", "strep", "strep throat",
+          "congestion", "stuffy", "stuffed up", "blocked nose",
+          "runny nose", "nasal drip", "sneezing",
+          "breathing", "short of breath", "shortness of breath", "breathless",
+          "sneeze", "sneezing", "sniffling",
+          "sinus", "sinusitis", "sinus pressure", "sinus pain",
+          
+          // Skin-related terms
+          "rash", "skin rash", "breakout", "hives",
+          "itch", "itchy", "itching", "scratchy",
+          "dry skin", "flaky skin", "skin irritation",
+          "eczema", "dermatitis",
+          "sunburn", "sun burn", "burned skin",
+          "insect bite", "bug bite", "mosquito bite", "bee sting",
+          
+          // Allergy terms
+          "allergy", "allergic", "allergic reaction", 
+          "hay fever", "pollen allergy", "seasonal allergy",
+          "watery eyes", "itchy eyes", "red eyes",
+          
+          // Miscellaneous common terms
+          "fatigue", "tired", "exhaustion", "no energy", "exhausted",
+          "dizziness", "dizzy", "lightheaded", "vertigo", "balance",
+          "dehydration", "dehydrated", "thirsty", "dry mouth",
+          "cuts", "scrapes", "wounds", "abrasions", "injured",
+          "burn", "burned", "burning",
+          "swelling", "swollen", "inflammation", "inflamed",
+          "bruise", "bruising", "black and blue",
+          "infection", "infected", "bacterial", "viral"
+        ];
+        
+        // Check if any common symptoms are found in the user's input
+        const foundSymptoms = commonSymptoms.filter(symptom => 
+          userData.symptoms.toLowerCase().includes(symptom)
+        );
+        
+        console.log("🔍 Found these common symptoms in input:", foundSymptoms);
+        
+        // If no specific symptoms found, add common ones to improve matching
+        let enhancedSymptoms = userData.symptoms;
+        if (foundSymptoms.length > 0) {
+          // Add specific symptom keywords that we found to help with matching
+          console.log("⚠️ Using enhanced symptoms for better medication matching");
+          enhancedSymptoms = userData.symptoms + " " + foundSymptoms.join(" ");
+        } else {
+          console.log("⚠️ No common symptoms detected in input, medication matching may be limited");
+          // Add some common symptoms to ensure we get recommendations
+          console.log("💊 Adding basic symptoms to ensure we get some recommendations");
+          enhancedSymptoms = userData.symptoms + " headache fever cold";
+        }
+        
+        const recommendations = getMedicationRecommendations(
+          medicationData,
+          enhancedSymptoms, // Use the enhanced symptoms
+          userData.age,
+          relevantRows.length > 0 ? relevantRows.map(row => row.Disease) : undefined
+        );
+        
+        // Ensure we set recommendations even if empty
+        setMedicationRecommendations(recommendations);
+        console.log("✅ Medication recommendations set:", 
+          recommendations.medications.length, 
+          "medications,", 
+          recommendations.warnings.length, 
+          "warnings");
+        if (recommendations.medications.length > 0) {
+          console.log("💊 First few medications:", recommendations.medications.slice(0, 2).map(m => m.name));
+        } else {
+          console.log("⚠️ No medications found for the symptoms");
+          
+          // IMPORTANT: Force display of at least one medication
+          console.log("📣 Forcing display of basic medications for testing");
+          if (medicationData.medications.length > 0) {
+            // Take the first two basic medications for testing purposes
+            const forcedMedications = medicationData.medications.slice(0, 2);
+            setMedicationRecommendations({
+              medications: forcedMedications,
+              warnings: ["These are general medications not specifically matched to your symptoms."]
+            });
+            console.log("💊 Forced medication display:", forcedMedications.map(m => m.name));
+          }
+        }
+      } else {
+        console.error("❌ No medication data available when trying to get recommendations");
+      }
+      
       // Build the context for the LLM with enhanced data
       const csvContext = relevantRows.length > 0
         ? `Here are some relevant medical records:\n${JSON.stringify(relevantRows, null, 2)}`
@@ -442,7 +595,7 @@ Answer in this JSON format: {
       
       // Parse the response
       let parsed;
-      let shouldShowFacilities = true; // Flag to track if we need to show facilities
+      let shouldShowFacilities = showFacilities; // Flag to track if we need to show facilities
       
       try {
         console.log("Attempting to parse Llama response:", llamaResponse.substring(0, 100) + "...");
@@ -481,6 +634,42 @@ Answer in this JSON format: {
           setIsTyping(false);
           addBotMessage(`Based on your symptoms, here's what I found:\n\n${parsed.insights}`);
           
+          // Helper function to show specialists and facilities (defined inside to access parsed and shouldShowFacilities)
+          const showSpecialistsAndFacilities = () => {
+            if (parsed.specialists.length > 0) {
+              setIsTyping(true);
+              setTimeout(() => {
+                setIsTyping(false);
+                const specialistsWithEmojis = parsed.specialists.map((s: string) => `👨‍⚕️ ${s}`).join('\n');
+                addBotMessage(`I recommend consulting with these specialists:\n${specialistsWithEmojis}`);
+                
+                // Display health factors if available
+                if (parsed.healthFactors) {
+                  setIsTyping(true);
+                  setTimeout(() => {
+                    setIsTyping(false);
+                    addBotMessage(`📊 Health factors:\n${parsed.healthFactors}`);
+                    
+                    // Show nearby facilities only if flag is true
+                    if (shouldShowFacilities) {
+                      showNearbyFacilities();
+                    }
+                  }, 1000);
+                } else {
+                  // No health factors, just show facilities
+                  if (shouldShowFacilities) {
+                    showNearbyFacilities();
+                  }
+                }
+              }, 1000);
+            } else {
+              // No specialists, show facilities
+              if (shouldShowFacilities) {
+                showNearbyFacilities();
+              }
+            }
+          };
+          
           if (parsed.conditions.length > 0) {
             setIsTyping(true);
             setTimeout(() => {
@@ -488,43 +677,59 @@ Answer in this JSON format: {
               const conditionsWithEmojis = parsed.conditions.map((c: string) => `🔍 ${c}`).join('\n');
               addBotMessage(`Possible conditions:\n${conditionsWithEmojis}`);
               
-              if (parsed.specialists.length > 0) {
+              console.log("🔍 Checking medication recommendations before display:", 
+                medicationRecommendations.medications.length, "medications available");
+                
+                // FORCE DISPLAY of medication recommendations regardless of conditions
+                console.log("✨ FORCE DISPLAY: Will show medication recommendations");
                 setIsTyping(true);
                 setTimeout(() => {
                   setIsTyping(false);
-                  const specialistsWithEmojis = parsed.specialists.map((s: string) => `👨‍⚕️ ${s}`).join('\n');
-                  addBotMessage(`I recommend consulting with these specialists:\n${specialistsWithEmojis}`);
+                  addBotMessage("💊 I can suggest some safe first aid medications based on your symptoms. Click on each medication for more details.");
                   
-                  // Display health factors if available
-                  if (parsed.healthFactors) {
-                    setIsTyping(true);
-                    setTimeout(() => {
-                      setIsTyping(false);
-                      addBotMessage(`📊 Health factors:\n${parsed.healthFactors}`);
-                      
-                      // Show nearby facilities only if flag is true
-                      if (shouldShowFacilities) {
-                        showNearbyFacilities();
-                      }
-                    }, 1000);
-                  } else {
-                    // No health factors, just show facilities
-                    if (shouldShowFacilities) {
-                      showNearbyFacilities();
-                    }
-                  }
+                  // Create a "medication recommendations" element that will display the medications directly in chat
+                  console.log("➕ Adding medication recommendations component to chat");
+                  const medRecsMessage: Message = {
+                    id: Date.now().toString(),
+                    text: '**MEDICATION_RECOMMENDATIONS**', // Special marker that we'll replace with the medication component
+                    sender: 'bot',
+                    timestamp: new Date()
+                  };
+                  setMessages(prev => [...prev, medRecsMessage]);
+                  
+                  // After medications, THEN show specialists
+                  showSpecialistsAndFacilities();
                 }, 1000);
-              } else {
-                // No specialists, show facilities
+            }, 1000);
+          } else {
+            // No conditions were found, still check for medications
+            if (medicationRecommendations.medications.length > 0) {
+              console.log("⚠️ No conditions but found medications, displaying them");
+              setIsTyping(true);
+              setTimeout(() => {
+                setIsTyping(false);
+                addBotMessage("💊 I can suggest some safe first aid medications that might help with your symptoms. Click on each medication for more details.");
+                
+                // Create a "medication recommendations" element
+                const medRecsMessage: Message = {
+                  id: Date.now().toString(),
+                  text: '**MEDICATION_RECOMMENDATIONS**',
+                  sender: 'bot',
+                  timestamp: new Date()
+                };
+                setMessages(prev => [...prev, medRecsMessage]);
+                
+                // Then show facilities
                 if (shouldShowFacilities) {
                   showNearbyFacilities();
                 }
+              }, 1000);
+            } else {
+              console.log("⚠️ No conditions and no medications, proceed to facilities");
+              // No conditions, no medications, just show facilities
+              if (shouldShowFacilities) {
+                showNearbyFacilities();
               }
-            }, 1000);
-          } else {
-            // No conditions were found, but still show facilities if flag is true
-            if (shouldShowFacilities) {
-              showNearbyFacilities();
             }
           }
         }, 1000);
@@ -550,6 +755,12 @@ Answer in this JSON format: {
   const showNearbyFacilities = () => {
     // If hospital data is already shown, don't add it again
     if (hospitalDataShown) {
+      return;
+    }
+
+    // If location is empty, skip showing facilities
+    if (!userData.location) {
+      console.log("⚠️ No location provided, skipping facility display");
       return;
     }
     
@@ -611,7 +822,7 @@ Answer in this JSON format: {
     </div>
   );
 
-  // Modified renderMessages to handle the special hospital list marker
+  // Modified renderMessages to handle the special hospital list marker and medication recommendations
   const renderMessages = () => {
     return (
       <>
@@ -622,6 +833,26 @@ Answer in this JSON format: {
               <div key={message.id} className="mb-4 text-left">
                 <div className="inline-block max-w-[95%] rounded-lg p-4 bg-gradient-to-r from-indigo-100 to-blue-100 text-blue-900 shadow-md">
                   <HospitalDisplay pincode={userData.location} specialty={selectedSpecialty} />
+                </div>
+              </div>
+            );
+          }
+          
+          // Special handler for medication recommendations
+          if (message.sender === 'bot' && message.text === '**MEDICATION_RECOMMENDATIONS**') {
+            console.log("🔎 Found MEDICATION_RECOMMENDATIONS marker in messages, rendering component");
+            console.log("💊 Available medications:", medicationRecommendations.medications.length);
+            console.log("⚠️ Available warnings:", medicationRecommendations.warnings.length);
+            console.log("📋 Disclaimer:", medicationData?.disclaimer ? "available" : "not available");
+            
+            return (
+              <div key={message.id} className="mb-4 text-left">
+                <div className="inline-block max-w-[95%] rounded-lg p-4 bg-gradient-to-r from-indigo-100 to-blue-100 text-blue-900 shadow-md">
+                  <MedicationRecommendations 
+                    medications={medicationRecommendations.medications} 
+                    warnings={medicationRecommendations.warnings}
+                    disclaimer={medicationData?.disclaimer || "This information is for educational purposes only and not a substitute for professional medical advice."}
+                  />
                 </div>
               </div>
             );
@@ -671,7 +902,7 @@ Answer in this JSON format: {
               <span className="text-2xl mr-2">🩺</span>
               <h1 className="text-white text-xl font-bold">MedGuide</h1>
             </div>
-            <div className="text-white text-sm">Find the right specialist</div>
+            <div className="text-white text-sm">Telemedicine & Healthcare Navigation</div>
           </div>
         </div>
       </header>

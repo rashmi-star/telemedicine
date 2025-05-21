@@ -1,87 +1,78 @@
-# SmartMed Connect
+# MedGuide - Telemedicine & First Aid Medication Advisor
 
-SmartMed Connect is an AI-powered healthcare platform that helps patients find the right medical specialists based on their symptoms and location. The platform uses advanced natural language processing and machine learning to analyze symptoms, predict potential conditions, and match patients with appropriate healthcare providers.
+MedGuide is an AI-powered telemedicine application that helps users understand their symptoms, suggests appropriate first aid medications, and connects them with relevant healthcare specialists in their area.
 
-## Features
+## Key Features
 
-- **AI-Powered Symptom Analysis**: Advanced NLP algorithms analyze patient symptoms to identify potential conditions and severity.
-- **Intelligent Specialist Matching**: Machine learning models match patients with the most suitable medical specialists based on their symptoms and medical history.
-- **Location-Based Healthcare**: Interactive map interface showing nearby hospitals and clinics with real-time availability.
-- **Pre-Consultation Insights**: Provides patients with relevant medical information and questions to discuss with their doctor.
+### 1. Telemedicine First Aid
+- Suggests safe over-the-counter medications based on symptoms
+- Provides detailed information on dosage, safety notes, and warnings for 15+ common medications
+- Adapts recommendations based on age and medical conditions
+- Clear disclaimers and safety warnings for all medication suggestions
 
-## Tech Stack
+### 2. Intelligent Symptom Analysis
+- Conversational interface for symptom collection
+- Analysis of symptoms using AI and a comprehensive medical database
+- Smart symptom detection and matching with appropriate medications
+- Identification of possible conditions based on reported symptoms
 
-- **Frontend**: React, TypeScript, Tailwind CSS
-- **Maps**: Leaflet.js for interactive healthcare facility mapping
-- **AI/ML**: Custom NLP and ML models for symptom analysis and condition prediction
-- **Database**: Supabase for data storage and real-time updates
-- **Authentication**: Supabase Auth for secure user management
+### 3. Specialist Recommendations
+- Matches symptoms to appropriate medical specialists
+- Provides location-based healthcare facility listings
+- Interactive map to explore nearby healthcare options
+
+## How It Works
+
+1. **Symptom Collection**: The system collects symptoms and relevant health information through a conversational interface
+2. **Medication Analysis**: Analyzes symptoms against a database of safe first aid medications
+3. **Personalized Recommendations**: Suggests medications based on symptom severity, age, and health conditions
+4. **Specialist Matching**: Identifies which medical specialists would be appropriate for consultation
+5. **Location-Based Results**: Shows nearby healthcare facilities based on user's location (optional)
+
+## Medication Database
+
+The application includes a comprehensive database of over-the-counter medications with detailed information:
+- Specific symptoms treated
+- Age-appropriate dosages (adult and child)
+- Safety precautions and warnings
+- Potential side effects
+- Contraindications and drug interactions
+
+## Important Medical Disclaimer
+
+The medication recommendations provided by MedGuide are for informational purposes only and not a substitute for professional medical advice. All suggested medications are common over-the-counter options. Users should always consult with healthcare professionals before taking any medication.
+
+## Technology Stack
+
+- React with TypeScript
+- Tailwind CSS for UI components
+- LLM-powered symptom analysis
+- JSON-based medication database
+- Interactive mapping for healthcare facilities
 
 ## Getting Started
 
 ### Prerequisites
-
-- Node.js (v16 or higher)
+- Node.js (v14 or higher)
 - npm or yarn
-- Supabase account and project
 
 ### Installation
-
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/smartmed-connect.git
-   cd smartmed-connect
+   ```
+   git clone https://github.com/rashmi-star/telemedicine.git
+   cd telemedicine
    ```
 
 2. Install dependencies:
-   ```bash
+   ```
    npm install
    ```
 
-3. Create a `.env` file in the root directory with your Supabase credentials:
+3. Start the development server:
    ```
-   VITE_SUPABASE_URL=your_supabase_project_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-
-4. Start the development server:
-   ```bash
    npm run dev
    ```
 
-The application will be available at `http://localhost:3000`.
-
-## Project Structure
-
-```
-smartmed-connect/
-├── src/
-│   ├── components/         # React components
-│   ├── utils/             # Utility functions and hooks
-│   ├── types/             # TypeScript type definitions
-│   ├── App.tsx            # Main application component
-│   └── main.tsx           # Application entry point
-├── public/                # Static assets
-├── index.html             # HTML entry point
-└── package.json           # Project dependencies
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- [React](https://reactjs.org/)
-- [TypeScript](https://www.typescriptlang.org/)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [Leaflet](https://leafletjs.com/)
-- [Supabase](https://supabase.io/) 
+This project is licensed under the MIT License. 

@@ -9,7 +9,7 @@ const App: React.FC = () => {
         <header className="bg-white shadow-sm">
           <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
             <h1 className="text-2xl font-bold text-gray-900">
-              SmartMed Connect
+              MedGuide: Telemedicine Assistant
             </h1>
           </div>
         </header>
@@ -21,7 +21,7 @@ const App: React.FC = () => {
         <footer className="bg-white border-t border-gray-200">
           <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
             <p className="text-center text-sm text-gray-500">
-              SmartMed Connect - AI-Driven Healthcare Solution
+              MedGuide - AI-Driven Telemedicine & First Aid Medication Suggestions
             </p>
           </div>
         </footer>
