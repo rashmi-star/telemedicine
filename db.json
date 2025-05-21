@@ -1,0 +1,66 @@
+{
+  "symptoms": [
+    "headache",
+    "fever",
+    "cough",
+    "fatigue",
+    "nausea",
+    "chest pain",
+    "shortness of breath"
+  ],
+  "conditions": [
+    {
+      "id": "1",
+      "condition": "migraine",
+      "confidence": 0.85,
+      "recommendedSpecialties": ["neurologist", "headache specialist"],
+      "urgency": "medium"
+    },
+    {
+      "id": "2",
+      "condition": "flu",
+      "confidence": 0.75,
+      "recommendedSpecialties": ["general practitioner", "infectious disease specialist"],
+      "urgency": "low"
+    },
+    {
+      "id": "3",
+      "condition": "bronchitis",
+      "confidence": 0.65,
+      "recommendedSpecialties": ["pulmonologist", "general practitioner"],
+      "urgency": "medium"
+    }
+  ],
+  "healthcare_facilities": [
+    {
+      "id": "1",
+      "name": "City General Hospital",
+      "type": "hospital",
+      "specialty": ["neurologist", "pulmonologist", "general practitioner"],
+      "location": { "lat": 40.7128, "lng": -74.0060 },
+      "address": "123 Medical Center Drive",
+      "contact": "555-0123",
+      "pincode": "10001"
+    },
+    {
+      "id": "2",
+      "name": "Downtown Clinic",
+      "type": "clinic",
+      "specialty": ["general practitioner", "pulmonologist"],
+      "location": { "lat": 40.7148, "lng": -74.0070 },
+      "address": "456 Health Street",
+      "contact": "555-0124",
+      "pincode": "10002"
+    },
+    {
+      "id": "3",
+      "name": "Specialty Medical Center",
+      "type": "hospital",
+      "specialty": ["neurologist", "pulmonologist"],
+      "location": { "lat": 40.7138, "lng": -74.0080 },
+      "address": "789 Care Avenue",
+      "contact": "555-0125",
+      "pincode": "10003"
+    }
+  ]
+} 
