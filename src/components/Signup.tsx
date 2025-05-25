@@ -79,9 +79,7 @@ export const Signup: React.FC = () => {
       }
       
       if (data?.user) {
-        setSignupComplete(true);
         const successMsg = `Account created successfully for ${email}!`;
-        setSuccessMessage(successMsg);
         showNotification('success', successMsg);
         
         // Save user data in Supabase profiles table if needed
@@ -106,10 +104,11 @@ export const Signup: React.FC = () => {
         
         // If email confirmation is not required or already confirmed
         if (data.user.email_confirmed_at) {
-          // We'll handle redirection with a button instead of automatic redirect
-          showNotification('info', 'Your email is already verified. You can login now.');
+          // Directly navigate to documents page
+          navigate('/documents', { replace: true });
         } else {
-          showNotification('info', 'Please check your email to verify your account.');
+          // Still navigate to documents if possible
+          navigate('/documents', { replace: true });
         }
       }
     } catch (err) {
