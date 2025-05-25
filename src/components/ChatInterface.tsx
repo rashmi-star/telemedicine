@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { getLlamaCompletion } from '../utils/llamaApi';
+import { getLlamaCompletion, getAirQualityData } from '../utils/llamaApi';
 import { loadMedicalDataset } from '../utils/csvLoader';
 import { SpecialistList } from './SpecialistList';
 import HospitalDisplay from './HospitalDisplay';
 import { useMedicationData, getMedicationRecommendations, Medication } from '../utils/medicationLoader';
 import MedicationRecommendations from './MedicationRecommendations';
+import { pdfjs } from '../utils/pdfSetup';
 
 // Define the different types of messages
 type MessageSender = 'bot' | 'user';
@@ -29,6 +30,7 @@ type ConversationStep =
   | 'askCholesterol'
   | 'askLocation' 
   | 'askLocationDetails' 
+  | 'processingDoc'
   | 'processing' 
   | 'showResults';
 
@@ -42,6 +44,7 @@ interface UserData {
   gender?: string;
   bloodPressure?: string;
   cholesterolLevel?: string;
+  medicalDocument?: string; // For document content
 }
 
 export const ChatInterface: React.FC = () => {
@@ -128,13 +131,13 @@ export const ChatInterface: React.FC = () => {
         const newMessages = [
           {
             id: `greeting-1-${Date.now()}`,
-            text: "👋 Hi there! I'm your MedGuide telemedicine assistant. I can suggest appropriate first aid medications based on your symptoms and help you find healthcare specialists.",
+            text: "👋 Hi there! I'm your MedGuide telemedicine assistant. I can analyze your symptoms, suggest appropriate medications, help find specialists, and analyze medical documents.",
             sender: 'bot' as const,
             timestamp: new Date()
           },
           {
             id: `greeting-2-${Date.now() + 100}`,
-            text: "Please describe your symptoms so I can suggest appropriate first aid medications and medical specialists.",
+            text: "Please describe your symptoms, or you can upload a medical document for me to analyze.",
             sender: 'bot' as const,
             timestamp: new Date(Date.now() + 100)
           }
@@ -206,32 +209,201 @@ export const ChatInterface: React.FC = () => {
     return normalized;
   };
 
-  // Process user input based on current step
+  // File upload reference
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Extract text from PDF files
+  const extractTextFromPdf = async (file: File): Promise<string> => {
+    try {
+      console.log("PDF file received, size:", file.size, "bytes");
+      
+      // Use PDF.js directly without relying on window.pdfjsLib
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+      
+      let fullText = '';
+      
+      // Extract text from each page
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item: any) => item.str).join(' ');
+        fullText += pageText + '\n\n';
+      }
+      
+      console.log("Successfully extracted PDF text, length:", fullText.length);
+      return fullText || "No text content could be extracted from the file";
+    } catch (error) {
+      console.error("Error extracting text from PDF:", error);
+      
+      // Fallback to simple text extraction
+      try {
+        const text = await file.text();
+        console.log("Falling back to basic text extraction, length:", text.length);
+        return text || "No text content could be extracted from the file";
+      } catch (innerError) {
+        console.error("Fallback text extraction also failed:", innerError);
+        throw new Error("Failed to extract text from the document");
+      }
+    }
+  };
+  
+  // Handle file upload
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setIsLoading(true);
+    addBotMessage(`I see you've uploaded a document (${file.name}). I'll analyze this for you.`);
+    
+    try {
+      // Extract text from the uploaded file
+      let extractedContent = '';
+      
+      if (file.type === 'application/pdf') {
+        extractedContent = await extractTextFromPdf(file);
+      } else if (file.type === 'application/json') {
+        const jsonContent = await file.text();
+        extractedContent = `JSON CONTENT:\n${jsonContent}`;
+      } else if (file.type === 'text/csv') {
+        const csvContent = await file.text();
+        extractedContent = `CSV CONTENT:\n${csvContent}`;
+      } else {
+        extractedContent = await file.text();
+      }
+      
+      if (!extractedContent || extractedContent.trim().length < 10) {
+        throw new Error("Could not extract meaningful text from the document. Please try another file.");
+      }
+      
+      // Store the extracted content in user data
+      setUserData(prev => ({ ...prev, medicalDocument: extractedContent }));
+      
+      // Prompt for location for environmental analysis
+      addBotMessage("Thank you for providing your medical document. To provide more comprehensive analysis, could you share your location (city name or ZIP code)? This helps me analyze environmental factors that might impact your health.");
+      setCurrentStep('askLocationDetails');
+      
+    } catch (error) {
+      addBotMessage(`I had trouble processing your document: ${error instanceof Error ? error.message : 'Unknown error'}. Could you describe your symptoms instead?`);
+      setCurrentStep('askSymptoms');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Trigger file input click
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Process user input
   const processUserInput = async () => {
     if (!userInput.trim()) return;
     
-    const input = userInput.trim();
-    addUserMessage(input);
+    // Add user message
+    addUserMessage(userInput);
+    
+    // Save input before clearing
+    const input = userInput;
+    
+    // Clear input field
     setUserInput('');
     
-    // Add a slight delay to simulate thinking
-    setIsTyping(true);
-
+    // Show typing indicator
+    addTypingIndicator();
+    
+    // Process file upload command
+    if (input.toLowerCase().includes('upload') || input.toLowerCase().includes('document')) {
+      setTimeout(() => {
+        addBotMessage("You can upload a medical document by clicking the upload button in the chat box. I'll analyze it for you.");
+      }, 1000);
+      return;
+    }
+    
+    // Check for hospital/doctor search intent
+    if (input.toLowerCase().includes('hospital') || 
+        input.toLowerCase().includes('doctor') || 
+        input.toLowerCase().includes('clinic') ||
+        input.toLowerCase().includes('specialist') ||
+        input.toLowerCase().includes('nearby') ||
+        input.toLowerCase().includes('find')) {
+      
+      if (!userData.location) {
+        setTimeout(() => {
+          addBotMessage("To help you find nearby medical facilities, I need your location. Please share your city or ZIP code.");
+          setCurrentStep('askLocationDetails');
+        }, 1000);
+      } else {
+        showNearbyFacilities();
+      }
+      return;
+    }
+    
+    // Process input based on current step
     switch (currentStep) {
       case 'askSymptoms':
+        // Save symptoms
         setUserData(prev => ({ ...prev, symptoms: input }));
+        
+        // Check if the input is long enough to be a symptom description
+        if (input.length > 10) {
         setTimeout(() => {
-          setIsTyping(false);
-          addBotMessage("How long have you been experiencing these symptoms?");
+            addBotMessage("Thank you for describing your symptoms. How long have you been experiencing them?");
           setCurrentStep('askDuration');
         }, 1000);
+        } else {
+          // Use Llama API for a natural conversation about symptoms
+          try {
+            // Build conversation history for context
+            const conversationHistory = messages.slice(-6).map(msg => ({
+              role: msg.sender === 'user' ? 'user' : 'assistant',
+              content: msg.text
+            }));
+            
+            // Add the latest user input
+            conversationHistory.push({
+              role: 'user',
+              content: input
+            });
+            
+            // Call Llama API for a natural response
+            const response = await getLlamaCompletion("", {
+              includeContextualData: {
+                conversationHistory
+              }
+            });
+            
+            // Try to parse the response
+            try {
+              const parsedResponse = JSON.parse(response);
+              setTimeout(() => {
+                // If it's JSON, use the insights field
+                addBotMessage(parsedResponse.insights || "Could you tell me more about your symptoms? What specifically are you experiencing?");
+                
+                // Stay in the same step to collect more information
+                setCurrentStep('askSymptoms');
+              }, 1000);
+            } catch (e) {
+              // If it's not JSON, use the raw response
+              setTimeout(() => {
+                addBotMessage(response);
+                setCurrentStep('askSymptoms');
+              }, 1000);
+            }
+          } catch (error) {
+            console.error("Error calling Llama API for conversation:", error);
+            setTimeout(() => {
+              addBotMessage("Could you tell me more about your symptoms? What specifically are you experiencing?");
+              setCurrentStep('askSymptoms');
+            }, 1000);
+          }
+        }
         break;
 
       case 'askDuration':
         setUserData(prev => ({ ...prev, duration: input }));
         setTimeout(() => {
-          setIsTyping(false);
-          addBotMessage("On a scale of mild, moderate, or severe, how would you rate your symptoms?");
+          addBotMessage("On a scale of 1-10, how would you rate the severity of your symptoms?");
           setCurrentStep('askSeverity');
         }, 1000);
         break;
@@ -239,513 +411,396 @@ export const ChatInterface: React.FC = () => {
       case 'askSeverity':
         setUserData(prev => ({ ...prev, severity: input }));
         setTimeout(() => {
-          setIsTyping(false);
-          addBotMessage("What is your age? This helps us provide more accurate analysis.");
+          addBotMessage("Thank you. What's your age? This helps me provide more accurate recommendations.");
           setCurrentStep('askAge');
         }, 1000);
         break;
         
       case 'askAge':
-        // Validate that input is a reasonable age
-        const age = parseInt(input, 10);
-        if (isNaN(age) || age < 1 || age > 120) {
-          setTimeout(() => {
-            setIsTyping(false);
-            addBotMessage("Please enter a valid age (1-120).");
-          }, 1000);
-          return;
-        }
-        
         setUserData(prev => ({ ...prev, age: input }));
         setTimeout(() => {
-          setIsTyping(false);
-          addBotMessage("What is your gender (Male/Female/Other)? This helps with more personalized analysis.");
+          addBotMessage("What's your gender? This is relevant for certain medical conditions.");
           setCurrentStep('askGender');
         }, 1000);
         break;
         
       case 'askGender':
-        const normalizedGender = input.toLowerCase();
-        if (!['male', 'female', 'other'].includes(normalizedGender)) {
-          setTimeout(() => {
-            setIsTyping(false);
-            addBotMessage("Please specify Male, Female, or Other.");
-          }, 1000);
-          return;
-        }
-        
         setUserData(prev => ({ ...prev, gender: input }));
         setTimeout(() => {
-          setIsTyping(false);
-          addBotMessage("How would you describe your blood pressure (High/Normal/Low)? If you're not sure, please respond with 'Not sure'.");
-          setCurrentStep('askBloodPressure');
-        }, 1000);
-        break;
-        
-      case 'askBloodPressure':
-        const normalizedBP = input.toLowerCase();
-        if (!['high', 'normal', 'low', 'not sure'].includes(normalizedBP)) {
-          setTimeout(() => {
-            setIsTyping(false);
-            addBotMessage("Please specify High, Normal, Low, or Not sure.");
-          }, 1000);
-          return;
-        }
-        
-        setUserData(prev => ({ ...prev, bloodPressure: input }));
-        setTimeout(() => {
-          setIsTyping(false);
-          addBotMessage("How would you describe your cholesterol level (High/Normal/Low)? If you're not sure, please respond with 'Not sure'.");
-          setCurrentStep('askCholesterol');
-        }, 1000);
-        break;
-        
-      case 'askCholesterol':
-        const normalizedChol = input.toLowerCase();
-        if (!['high', 'normal', 'low', 'not sure'].includes(normalizedChol)) {
-          setTimeout(() => {
-            setIsTyping(false);
-            addBotMessage("Please specify High, Normal, Low, or Not sure.");
-          }, 1000);
-          return;
-        }
-        
-        setUserData(prev => ({ ...prev, cholesterolLevel: input }));
-        setTimeout(() => {
-          setIsTyping(false);
-          addBotMessage("Would you like me to suggest safe first aid medications based on your symptoms? Type 'yes' to get medication suggestions or 'more' if you'd also like to see nearby healthcare facilities.");
+          addBotMessage("What city or region do you live in? This helps me analyze environmental factors that might affect your health.");
           setCurrentStep('askLocation');
         }, 1000);
         break;
-
+        
       case 'askLocation':
-        // New flow with optional location
-        if (input.toLowerCase() === 'yes' || input.toLowerCase() === 'y') {
-          // User only wants medication recommendations
-          setUserData(prev => ({ ...prev, location: '' }));
-          setIsTyping(false);
-          addBotMessage("I'll analyze your symptoms and suggest some safe first aid medications...");
-          setCurrentStep('processing');
-          await analyzeSymptoms(false); // false indicates we don't need to show facilities
-        } 
-        else if (input.toLowerCase() === 'more' || input.toLowerCase() === 'm') {
-          // User wants both medications and facilities, ask for location
-          setTimeout(() => {
-            setIsTyping(false);
-            addBotMessage("Great! What's your location? Please enter your pincode or ZIP code (like 91766 or 110001) so I can find real-time data about healthcare facilities near you.");
-            setCurrentStep('askLocationDetails');
-          }, 1000);
-        }
-        else {
-          // Default to just medication recommendations if the response isn't clear
-          setTimeout(() => {
-            setIsTyping(false);
-            addBotMessage("I'll analyze your symptoms and suggest some safe first aid medications. If you'd like to see nearby healthcare facilities, please type 'more' instead.");
-          }, 1000);
-          return;
+        setUserData(prev => ({ ...prev, location: input }));
+        
+        // Now that we have all the info, analyze symptoms
+        analyzeSymptoms(true);
+        break;
+        
+      case 'askLocationDetails':
+        setUserData(prev => ({ ...prev, location: input }));
+        
+        // If we have symptoms data, analyze with location
+        if (userData.symptoms) {
+          analyzeSymptoms(true);
+        } else {
+          // Just acknowledge the location
+          addBotMessage(`Thank you for providing your location (${input}). I'll now analyze your medical document along with environmental factors in your area...`);
+          
+          // If we have a document, analyze with location
+          if (userData.medicalDocument) {
+            analyzeDocument();
+          } else {
+            // Otherwise, ask for symptoms
+        setTimeout(() => {
+              addBotMessage("Could you describe your symptoms or health concerns?");
+              setCurrentStep('askSymptoms');
+        }, 1000);
+          }
         }
         break;
 
-      case 'askLocationDetails':
-        // Validate that input is a reasonable pincode format
-        const isPincode = /^\d{5,6}$/.test(input);
-        
-        if (!isPincode) {
+      case 'showResults':
+      default:
+        // For any other input after analysis is complete, use Llama API for a natural conversation
+        try {
+          // Build conversation history for context
+          const conversationHistory = messages.slice(-10).map(msg => ({
+            role: msg.sender === 'user' ? 'user' : 'assistant',
+            content: msg.text
+          }));
+          
+          // Add the latest user input
+          conversationHistory.push({
+            role: 'user',
+            content: input
+          });
+          
+          // Add context about previous analysis
+          const prompt = `
+            You are a medical assistant chatting with a patient. The patient has already shared their symptoms: "${userData.symptoms}" 
+            with severity ${userData.severity}/10 for a duration of ${userData.duration}.
+            
+            You previously provided these insights: "${aiResults.insights}"
+            
+            The patient is now asking: "${input}"
+            
+            Please respond in a helpful, conversational way. If they're asking about specialists, medications, or nearby facilities, 
+            offer to show them that information.
+          `;
+          
+          // Call Llama API for a natural response
+          const response = await getLlamaCompletion(prompt);
+          
+          // Try to parse the response
+          try {
+            const parsedResponse = JSON.parse(response);
           setTimeout(() => {
-            setIsTyping(false);
-            addBotMessage("I need a valid pincode or ZIP code to find nearby healthcare facilities. Please enter a 5-digit US ZIP code or 6-digit Indian pincode.");
+              // If it's JSON, use the insights field
+              addBotMessage(parsedResponse.insights || response);
           }, 1000);
-          return;
+          } catch (e) {
+            // If it's not JSON, use the raw response
+          setTimeout(() => {
+              addBotMessage(response);
+          }, 1000);
+          }
+        } catch (error) {
+          console.error("Error calling Llama API for conversation:", error);
+          setTimeout(() => {
+            addBotMessage("I'm here to help with any other questions you might have about your health concerns.");
+          }, 1000);
         }
-        
-        setUserData(prev => ({ ...prev, location: input }));
-        setIsTyping(false);
-        addBotMessage(`Thank you for providing your pincode (${input}). I'll now search for real-time data about healthcare facilities near you and analyze your symptoms...`);
-        setCurrentStep('processing');
-        await analyzeSymptoms(true); // true indicates we should show facilities
         break;
     }
   };
 
   // Analyze symptoms using Llama and the medical dataset with enhanced data
   const analyzeSymptoms = async (showFacilities: boolean) => {
-    setIsLoading(true);
     try {
-      // Load the medical dataset
-      const dataset = await loadMedicalDataset();
+      setIsLoading(true);
       
-      // Filter relevant rows with enhanced matching including age and gender
-      const relevantRows = dataset.filter(row => {
-        let match = true;
-        
-        // Symptom matching
-        if (userData.symptoms.toLowerCase().includes('fever') && row['Fever'] === 'Yes') match = match && true;
-        if (userData.symptoms.toLowerCase().includes('cough') && row['Cough'] === 'Yes') match = match && true;
-        if (userData.symptoms.toLowerCase().includes('fatigue') && row['Fatigue'] === 'Yes') match = match && true;
-        if (userData.symptoms.toLowerCase().includes('breath') && row['Difficulty Breathing'] === 'Yes') match = match && true;
-        
-        // Age matching - create a range of ±5 years
-        if (userData.age) {
-          const userAge = parseInt(userData.age, 10);
-          const rowAge = parseInt(row['Age'], 10);
-          
-          // Check if the row age is within 5 years of the user's age
-          if (!isNaN(userAge) && !isNaN(rowAge)) {
-            if (Math.abs(userAge - rowAge) > 10) {
-              match = match && false; // Age is too different
-            }
-          }
-        }
-        
-        // Gender matching
-        if (userData.gender && row['Gender']) {
-          const userGender = userData.gender.toLowerCase();
-          const rowGender = row['Gender'].toLowerCase();
-          
-          if (userGender !== 'other' && userGender !== rowGender) {
-            match = match && false; // Gender doesn't match
-          }
-        }
-        
-        // Blood pressure matching
-        if (userData.bloodPressure && 
-            userData.bloodPressure.toLowerCase() !== 'not sure' && 
-            row['Blood Pressure']) {
-          const userBP = userData.bloodPressure.toLowerCase();
-          const rowBP = row['Blood Pressure'].toLowerCase();
-          
-          if (userBP !== rowBP) {
-            match = match && false; // Blood pressure doesn't match
-          }
-        }
-        
-        // Cholesterol level matching
-        if (userData.cholesterolLevel && 
-            userData.cholesterolLevel.toLowerCase() !== 'not sure' && 
-            row['Cholesterol Level']) {
-          const userChol = userData.cholesterolLevel.toLowerCase();
-          const rowChol = row['Cholesterol Level'].toLowerCase();
-          
-          if (userChol !== rowChol) {
-            match = match && false; // Cholesterol level doesn't match
-          }
-        }
-        
-        return match;
-      }).slice(0, 10); // Limit to 10 rows for prompt size
+      // Prepare relevant user data for analysis
+      const userHealthData = {
+        symptoms: userData.symptoms,
+        duration: userData.duration,
+        severity: userData.severity,
+        age: userData.age,
+        gender: userData.gender,
+        bloodPressure: userData.bloodPressure,
+        cholesterolLevel: userData.cholesterolLevel
+      };
       
-      // Get medication recommendations
-      if (medicationData) {
-        console.log("🔍 About to get medication recommendations for symptoms:", userData.symptoms);
-        
-        // Check specific symptom keywords to ensure we're matching
-        const commonSymptoms = [
-          // Pain-related terms
-          "headache", "head ache", "head pain", 
-          "fever", "high temperature", "feeling hot", "feverish",
-          "cough", "coughing", "dry cough", "productive cough",
-          "cold", "common cold", "head cold", "chest cold",
-          "flu", "influenza", "flu-like",
-          "pain", "ache", "soreness", "discomfort", "hurt", "hurting",
-          "body ache", "body pain", "muscle ache", "muscle pain",
-          "joint pain", "joint ache", "arthritis pain",
-          "back pain", "backache", "lower back", "upper back",
-          
-          // Digestive terms
-          "stomach", "stomachache", "stomach pain", "tummy", "abdomen", "abdominal",
-          "nausea", "nauseated", "feeling sick", "queasy",
-          "vomiting", "throwing up", "vomit", "puking",
-          "diarrhea", "loose stool", "watery stool", "frequent bowel",
-          "constipation", "hard stool", "difficulty passing stool",
-          "indigestion", "heartburn", "acid reflux", "stomach acid",
-          "gas", "bloating", "flatulence", "bloated",
-          
-          // Respiratory terms
-          "throat", "sore throat", "throat pain", "strep", "strep throat",
-          "congestion", "stuffy", "stuffed up", "blocked nose",
-          "runny nose", "nasal drip", "sneezing",
-          "breathing", "short of breath", "shortness of breath", "breathless",
-          "sneeze", "sneezing", "sniffling",
-          "sinus", "sinusitis", "sinus pressure", "sinus pain",
-          
-          // Skin-related terms
-          "rash", "skin rash", "breakout", "hives",
-          "itch", "itchy", "itching", "scratchy",
-          "dry skin", "flaky skin", "skin irritation",
-          "eczema", "dermatitis",
-          "sunburn", "sun burn", "burned skin",
-          "insect bite", "bug bite", "mosquito bite", "bee sting",
-          
-          // Allergy terms
-          "allergy", "allergic", "allergic reaction", 
-          "hay fever", "pollen allergy", "seasonal allergy",
-          "watery eyes", "itchy eyes", "red eyes",
-          
-          // Miscellaneous common terms
-          "fatigue", "tired", "exhaustion", "no energy", "exhausted",
-          "dizziness", "dizzy", "lightheaded", "vertigo", "balance",
-          "dehydration", "dehydrated", "thirsty", "dry mouth",
-          "cuts", "scrapes", "wounds", "abrasions", "injured",
-          "burn", "burned", "burning",
-          "swelling", "swollen", "inflammation", "inflamed",
-          "bruise", "bruising", "black and blue",
-          "infection", "infected", "bacterial", "viral"
-        ];
-        
-        // Check if any common symptoms are found in the user's input
-        const foundSymptoms = commonSymptoms.filter(symptom => 
-          userData.symptoms.toLowerCase().includes(symptom)
-        );
-        
-        console.log("🔍 Found these common symptoms in input:", foundSymptoms);
-        
-        // If no specific symptoms found, add common ones to improve matching
-        let enhancedSymptoms = userData.symptoms;
-        if (foundSymptoms.length > 0) {
-          // Add specific symptom keywords that we found to help with matching
-          console.log("⚠️ Using enhanced symptoms for better medication matching");
-          enhancedSymptoms = userData.symptoms + " " + foundSymptoms.join(" ");
-        } else {
-          console.log("⚠️ No common symptoms detected in input, medication matching may be limited");
-          // Add some common symptoms to ensure we get recommendations
-          console.log("💊 Adding basic symptoms to ensure we get some recommendations");
-          enhancedSymptoms = userData.symptoms + " headache fever cold";
-        }
-        
-        const recommendations = getMedicationRecommendations(
-          medicationData,
-          enhancedSymptoms, // Use the enhanced symptoms
-          userData.age,
-          relevantRows.length > 0 ? relevantRows.map(row => row.Disease) : undefined
-        );
-        
-        // Ensure we set recommendations even if empty
-        setMedicationRecommendations(recommendations);
-        console.log("✅ Medication recommendations set:", 
-          recommendations.medications.length, 
-          "medications,", 
-          recommendations.warnings.length, 
-          "warnings");
-        if (recommendations.medications.length > 0) {
-          console.log("💊 First few medications:", recommendations.medications.slice(0, 2).map(m => m.name));
-        } else {
-          console.log("⚠️ No medications found for the symptoms");
-          
-          // IMPORTANT: Force display of at least one medication
-          console.log("📣 Forcing display of basic medications for testing");
-          if (medicationData.medications.length > 0) {
-            // Take the first two basic medications for testing purposes
-            const forcedMedications = medicationData.medications.slice(0, 2);
-            setMedicationRecommendations({
-              medications: forcedMedications,
-              warnings: ["These are general medications not specifically matched to your symptoms."]
-            });
-            console.log("💊 Forced medication display:", forcedMedications.map(m => m.name));
-          }
-        }
-      } else {
-        console.error("❌ No medication data available when trying to get recommendations");
+      // Get air quality data for the user's location if available
+      let airQualityData = null;
+      if (userData.location) {
+        airQualityData = await getAirQualityData(userData.location);
+        console.log("Air quality data:", airQualityData);
       }
       
-      // Build the context for the LLM with enhanced data
-      const csvContext = relevantRows.length > 0
-        ? `Here are some relevant medical records:\n${JSON.stringify(relevantRows, null, 2)}`
-        : 'No relevant records found in the dataset.';
+      // Check if the user has respiratory symptoms
+      const hasRespiratorySymptoms = 
+        userData.symptoms.toLowerCase().includes("breath") || 
+        userData.symptoms.toLowerCase().includes("cough") || 
+        userData.symptoms.toLowerCase().includes("asthma") ||
+        userData.symptoms.toLowerCase().includes("wheez") ||
+        userData.symptoms.toLowerCase().includes("respir");
       
-      console.log("Building prompt with context of length:", csvContext.length);
+      // Create a comprehensive prompt that includes all relevant information
+      let prompt = `
+        Please analyze the following patient information and provide health recommendations:
+        
+        Patient symptoms: ${userData.symptoms}
+        Duration of symptoms: ${userData.duration}
+        Severity: ${userData.severity}
+        ${userData.age ? `Age: ${userData.age}` : ''}
+        ${userData.gender ? `Gender: ${userData.gender}` : ''}
+        ${userData.bloodPressure ? `Blood Pressure: ${userData.bloodPressure}` : ''}
+        ${userData.cholesterolLevel ? `Cholesterol Level: ${userData.cholesterolLevel}` : ''}
+        ${userData.location ? `Location: ${userData.location}` : ''}
+        
+        Please provide:
+        1. Analysis of the patient's symptoms
+        2. Possible conditions to consider
+        3. Recommended specialists to consult
+        4. Medication recommendations if appropriate
+        5. Health recommendations based on the patient's symptoms and demographics
+        ${airQualityData ? `6. Environmental health considerations given the air quality (AQI: ${airQualityData.aqi}, Category: ${airQualityData.category})` : ''}
+        
+        Return your analysis as a JSON object with the following structure:
+        {
+          "insights": "Detailed analysis of symptoms and potential causes",
+          "conditions": ["Possible condition 1", "Possible condition 2"],
+          "specialists": ["Recommended specialist 1", "Recommended specialist 2"],
+          "medications": ["Medication 1", "Medication 2"],
+          "healthFactors": "General health recommendations",
+          "environmentalConsiderations": "Analysis of how environmental factors may affect the patient's condition"
+        }
+      `;
       
-      // Build the prompt for the LLM with enhanced data
-      const prompt = `${csvContext}\n\nThe user reports: ${userData.symptoms}.
-Additional user details:
-- Duration: ${userData.duration}
-- Severity: ${userData.severity}
-- Age: ${userData.age || 'Not provided'}
-- Gender: ${userData.gender || 'Not provided'}
-- Blood Pressure: ${userData.bloodPressure || 'Not provided'}
-- Cholesterol Level: ${userData.cholesterolLevel || 'Not provided'}
-
-Based on the dataset and your medical knowledge, analyze the symptoms and provide:
-1. A brief summary of the possible condition and initial advice
-2. Likely conditions that match these symptoms (list 2-3 possibilities)
-3. Types of medical specialists that would be appropriate to consult (list 2-3 specialists)
-4. Whether the patient should be concerned about their age, gender, blood pressure, or cholesterol in relation to these symptoms
-
-Answer in this JSON format: {
-  "insights": "<summary and advice for the patient>",
-  "conditions": [<list of likely conditions>],
-  "specialists": [<list of recommended specialists>],
-  "healthFactors": "<explanation of how age, gender, blood pressure, and cholesterol may affect their condition>"
-}`;
-      
-      console.log("Calling Llama with prompt length:", prompt.length);
-      
-      // Call the LLM
-      let llamaResponse;
-      try {
-        llamaResponse = await getLlamaCompletion(prompt);
-        console.log("Received Llama response");
-      } catch (llamaError) {
-        console.error("Error from Llama API call:", llamaError);
-        addBotMessage("I'm sorry, I encountered an error while analyzing your symptoms. Let me show you healthcare facilities in your area anyway.");
-        showNearbyFacilities();
-        setCurrentStep('showResults');
-        setIsLoading(false);
-        return;
-      }
-      
-      // Parse the response
-      let parsed;
-      let shouldShowFacilities = showFacilities; // Flag to track if we need to show facilities
+      // Call the Llama API with environmental data included
+      const llamaResponse = await getLlamaCompletion(prompt, {
+        includeEnvironmentalFactors: true,
+        includeContextualData: {
+          airQuality: airQualityData,
+          location: userData.location,
+          normalizedSymptoms: normalizeSymptoms(userData.symptoms),
+          hasRespiratorySymptoms
+        }
+      });
       
       try {
-        console.log("Attempting to parse Llama response:", llamaResponse.substring(0, 100) + "...");
-        parsed = JSON.parse(llamaResponse);
-      } catch (error) {
-        console.error("Failed to parse Llama response:", error);
-        console.error("Raw response:", llamaResponse);
-        addBotMessage("I had trouble analyzing your symptoms. Here's what I found:\n\n" + llamaResponse.substring(0, 500) + (llamaResponse.length > 500 ? "..." : ""));
+        // Parse Llama response
+        const parsedResponse = JSON.parse(llamaResponse);
         
-        // Show healthcare facilities and set current step
-        showNearbyFacilities();
-        shouldShowFacilities = false; // Set flag to prevent duplicate calls
+        // Format the air quality warning if applicable
+        let environmentalAlert = "";
+        if (airQualityData && 
+            (airQualityData.category === "Unhealthy for Sensitive Groups" || 
+             airQualityData.category === "Unhealthy" || 
+             airQualityData.category === "Very Unhealthy")) {
+          
+          if (hasRespiratorySymptoms) {
+            environmentalAlert = `⚠️ IMPORTANT: The air quality in your area (${userData.location}) is currently ${airQualityData.category.toUpperCase()} with an AQI of ${airQualityData.aqi}. This may be aggravating your respiratory symptoms. ${airQualityData.cautionaryStatement}`;
+          }
+        }
         
-        setCurrentStep('showResults');
-        setIsLoading(false);
-        return;
-      }
-      
-      if (parsed && parsed.insights && parsed.conditions && parsed.specialists) {
-        // Store the parsed results with enhanced health factors
+        // Set AI results state
         setAiResults({
-          insights: parsed.insights,
-          conditions: parsed.conditions,
-          specialists: parsed.specialists,
-          healthFactors: parsed.healthFactors || ""
+          insights: parsedResponse.insights || "Analysis complete. Please consult a healthcare professional for a proper diagnosis.",
+          conditions: parsedResponse.conditions || [],
+          specialists: parsedResponse.specialists || [],
+          healthFactors: environmentalAlert ? 
+            `${environmentalAlert}\n\n${parsedResponse.healthFactors || parsedResponse.environmentalConsiderations || ""}` : 
+            (parsedResponse.healthFactors || parsedResponse.environmentalConsiderations || "")
         });
         
-        // Set default selected specialist if any are recommended
-        if (parsed.specialists.length > 0) {
-          setSelectedSpecialty(parsed.specialists[0]);
+        // Prepare medication recommendations if medications are suggested
+        if (parsedResponse.medications && parsedResponse.medications.length > 0) {
+          // Get the symptoms as a string
+          const symptomsText = userData.symptoms;
+          
+          // Get the medication names as a string
+          const medicationText = parsedResponse.medications.join(", ");
+          
+          // Call the medication recommendation function with proper parameters
+          const medicationSuggestions = getMedicationRecommendations(
+            symptomsText, 
+            medicationText, 
+            {
+              age: userData.age ? parseInt(userData.age, 10) : undefined,
+              hasRespiratoryCondition: hasRespiratorySymptoms && airQualityData ? airQualityData.aqi > 100 : false
+            }
+          );
+          
+          setMedicationRecommendations(medicationSuggestions);
         }
         
-        // Display the results to the user with typing indicators between messages
-        setIsTyping(true);
+        // Update current step to show results
+        setCurrentStep('showResults');
+        
+        // Show message with environmental alert if applicable
         setTimeout(() => {
-          setIsTyping(false);
-          addBotMessage(`Based on your symptoms, here's what I found:\n\n${parsed.insights}`);
-          
-          // Helper function to show specialists and facilities (defined inside to access parsed and shouldShowFacilities)
-          const showSpecialistsAndFacilities = () => {
-            if (parsed.specialists.length > 0) {
-              setIsTyping(true);
-              setTimeout(() => {
-                setIsTyping(false);
-                const specialistsWithEmojis = parsed.specialists.map((s: string) => `👨‍⚕️ ${s}`).join('\n');
-                addBotMessage(`I recommend consulting with these specialists:\n${specialistsWithEmojis}`);
-                
-                // Display health factors if available
-                if (parsed.healthFactors) {
-                  setIsTyping(true);
-                  setTimeout(() => {
-                    setIsTyping(false);
-                    addBotMessage(`📊 Health factors:\n${parsed.healthFactors}`);
-                    
-                    // Show nearby facilities only if flag is true
-                    if (shouldShowFacilities) {
-                      showNearbyFacilities();
-                    }
-                  }, 1000);
-                } else {
-                  // No health factors, just show facilities
-                  if (shouldShowFacilities) {
-                    showNearbyFacilities();
-                  }
-                }
-              }, 1000);
-            } else {
-              // No specialists, show facilities
-              if (shouldShowFacilities) {
-                showNearbyFacilities();
-              }
-            }
-          };
-          
-          if (parsed.conditions.length > 0) {
-            setIsTyping(true);
-            setTimeout(() => {
-              setIsTyping(false);
-              const conditionsWithEmojis = parsed.conditions.map((c: string) => `🔍 ${c}`).join('\n');
-              addBotMessage(`Possible conditions:\n${conditionsWithEmojis}`);
-              
-              console.log("🔍 Checking medication recommendations before display:", 
-                medicationRecommendations.medications.length, "medications available");
-                
-                // FORCE DISPLAY of medication recommendations regardless of conditions
-                console.log("✨ FORCE DISPLAY: Will show medication recommendations");
-                setIsTyping(true);
-                setTimeout(() => {
-                  setIsTyping(false);
-                  addBotMessage("💊 I can suggest some safe first aid medications based on your symptoms. Click on each medication for more details.");
-                  
-                  // Create a "medication recommendations" element that will display the medications directly in chat
-                  console.log("➕ Adding medication recommendations component to chat");
-                  const medRecsMessage: Message = {
-                    id: Date.now().toString(),
-                    text: '**MEDICATION_RECOMMENDATIONS**', // Special marker that we'll replace with the medication component
-                    sender: 'bot',
-                    timestamp: new Date()
-                  };
-                  setMessages(prev => [...prev, medRecsMessage]);
-                  
-                  // After medications, THEN show specialists
-                  showSpecialistsAndFacilities();
-                }, 1000);
-            }, 1000);
-          } else {
-            // No conditions were found, still check for medications
-            if (medicationRecommendations.medications.length > 0) {
-              console.log("⚠️ No conditions but found medications, displaying them");
-              setIsTyping(true);
-              setTimeout(() => {
-                setIsTyping(false);
-                addBotMessage("💊 I can suggest some safe first aid medications that might help with your symptoms. Click on each medication for more details.");
-                
-                // Create a "medication recommendations" element
-                const medRecsMessage: Message = {
-                  id: Date.now().toString(),
-                  text: '**MEDICATION_RECOMMENDATIONS**',
-                  sender: 'bot',
-                  timestamp: new Date()
-                };
-                setMessages(prev => [...prev, medRecsMessage]);
-                
-                // Then show facilities
-                if (shouldShowFacilities) {
-                  showNearbyFacilities();
-                }
-              }, 1000);
-            } else {
-              console.log("⚠️ No conditions and no medications, proceed to facilities");
-              // No conditions, no medications, just show facilities
-              if (shouldShowFacilities) {
-                showNearbyFacilities();
-              }
-            }
+          if (environmentalAlert) {
+            addBotMessage(environmentalAlert);
           }
-        }, 1000);
-      } else {
-        console.error("Invalid Llama response format, missing required fields:", parsed);
-        addBotMessage("I had trouble analyzing your symptoms. Let me show you healthcare facilities in your area anyway.");
-        showNearbyFacilities();
-        shouldShowFacilities = false; // Prevent duplicate calls
+          
+          // Show the analysis message
+          addBotMessage("Based on your symptoms, I've analyzed potential causes and recommendations:");
+          
+          // If show facilities was requested, display that option
+          if (showFacilities && userData.location) {
+            setTimeout(() => {
+              addBotMessage("Would you like to see healthcare facilities in your area that specialize in these conditions?");
+              setHospitalDataShown(true);
+            }, 500);
+          }
+        }, 500);
+        
+      } catch (error) {
+        console.error("Error parsing Llama response:", error, llamaResponse);
+        addBotMessage("I encountered an issue analyzing your symptoms. Please try describing them differently.");
+        setCurrentStep('askSymptoms');
+      }
+    } catch (error) {
+      console.error("Error in symptom analysis:", error);
+      addBotMessage("I encountered an error analyzing your symptoms. Please try again.");
+      setCurrentStep('askSymptoms');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Analyze uploaded medical document
+  const analyzeDocument = async () => {
+    if (!userData.medicalDocument) return;
+    
+    try {
+      setIsLoading(true);
+      
+      // Get air quality data for the user's location if available
+      let airQualityData = null;
+      if (userData.location) {
+        airQualityData = await getAirQualityData(userData.location);
+        console.log("Air quality data:", airQualityData);
       }
       
-      setCurrentStep('showResults');
+      // Check if the user has respiratory symptoms based on document content
+      const hasRespiratorySymptoms = userData.medicalDocument.toLowerCase().includes("breath") || 
+                                    userData.medicalDocument.toLowerCase().includes("cough") || 
+                                    userData.medicalDocument.toLowerCase().includes("asthma") ||
+                                    userData.medicalDocument.toLowerCase().includes("wheez") ||
+                                    userData.medicalDocument.toLowerCase().includes("respir");
+      
+      // Create a comprehensive prompt for document analysis
+      const prompt = `
+        I need you to analyze this medical document and extract key information.
+        Extract patient details, medical findings, diagnoses, and recommendations.
+        
+        ${userData.location && airQualityData ? `Also consider environmental factors in the patient's location. The current air quality index (AQI) is ${airQualityData.aqi} (${airQualityData.category}). Provide specific warnings if the patient's condition could be affected by air quality.` : ''}
+        
+        The document content is:
+        ${userData.medicalDocument}
+        
+        Return your analysis as a JSON object with the following structure:
+        {
+          "insights": "Detailed analysis of the document and potential health implications",
+          "conditions": ["Condition 1", "Condition 2"],
+          "specialists": ["Recommended specialist 1", "Recommended specialist 2"],
+          "medications": ["Medication 1", "Medication 2"],
+          "labValues": [
+            {"name": "Test name", "value": "Result value", "normalRange": "Normal range", "isAbnormal": true/false}
+          ],
+          "environmentalFactors": "Analysis of how environmental factors may affect the patient's condition",
+          "recommendations": ["Recommendation 1", "Recommendation 2"]
+        }
+      `;
+      
+      // Call the Llama API with environmental data included
+      const llamaResponse = await getLlamaCompletion(prompt, {
+        includeEnvironmentalFactors: true,
+        extractMedicalData: true,
+        includeContextualData: airQualityData ? {
+          airQuality: airQualityData,
+          location: userData.location,
+          hasRespiratorySymptoms
+        } : undefined
+      });
+      
+      try {
+        // Parse Llama response
+        const parsedResponse = JSON.parse(llamaResponse);
+        
+        // Format the air quality warning if applicable
+        let environmentalAlert = "";
+        if (airQualityData && 
+            (airQualityData.category === "Unhealthy for Sensitive Groups" || 
+             airQualityData.category === "Unhealthy" || 
+             airQualityData.category === "Very Unhealthy")) {
+          
+          environmentalAlert = `⚠️ IMPORTANT: The air quality in your area (${userData.location}) is currently ${airQualityData.category.toUpperCase()} with an AQI of ${airQualityData.aqi}. ${airQualityData.cautionaryStatement}`;
+        }
+        
+        // Set AI results state
+        setAiResults({
+          insights: parsedResponse.insights || "Analysis complete. Please consult a healthcare professional for a proper diagnosis.",
+          conditions: parsedResponse.conditions || [],
+          specialists: parsedResponse.specialists || [],
+          healthFactors: environmentalAlert ? 
+            `${environmentalAlert}\n\n${parsedResponse.environmentalFactors || ""}` : 
+            (parsedResponse.environmentalFactors || "")
+        });
+        
+        // Update current step to show results
+        setCurrentStep('showResults');
+        
+        // Show message with environmental alert if applicable
+        setTimeout(() => {
+          if (environmentalAlert) {
+            addBotMessage(environmentalAlert);
+          }
+          
+          // Show the analysis message
+          addBotMessage("Here's my analysis of your medical document:");
+          
+          // Add lab values if available
+          if (parsedResponse.labValues && parsedResponse.labValues.length > 0) {
+            const abnormalValues = parsedResponse.labValues.filter((lab: any) => lab.isAbnormal);
+            if (abnormalValues.length > 0) {
+              const abnormalList = abnormalValues.map((lab: any) => 
+                `${lab.name}: ${lab.value} (normal range: ${lab.normalRange})`
+              ).join('\n- ');
+              
+              addBotMessage(`⚠️ The following lab values are outside the normal range:\n- ${abnormalList}`);
+            }
+          }
+          
+          // Add recommendations if available
+          if (parsedResponse.recommendations && parsedResponse.recommendations.length > 0) {
+            const recommendationsList = parsedResponse.recommendations.join('\n- ');
+            addBotMessage(`Recommendations:\n- ${recommendationsList}`);
+          }
+          
+          // Show hospital data option if location is available
+          if (userData.location) {
+            setTimeout(() => {
+              addBotMessage("Would you like to see healthcare facilities in your area that specialize in these conditions?");
+              setHospitalDataShown(true);
+            }, 500);
+          }
+        }, 500);
+        
     } catch (error) {
-      console.error('Error analyzing symptoms:', error);
-      addBotMessage("I'm sorry, I encountered an error while analyzing your symptoms. Let me show you healthcare facilities in your area anyway.");
-      showNearbyFacilities();
-      setCurrentStep('showResults');
+        console.error("Error parsing Llama response:", error, llamaResponse);
+        addBotMessage("I encountered an issue analyzing your document. Could you describe your health concerns directly instead?");
+        setCurrentStep('askSymptoms');
+      }
+    } catch (error) {
+      console.error("Error in document analysis:", error);
+      addBotMessage("I encountered an error analyzing your document. Let's try a different approach. Could you describe your symptoms?");
+      setCurrentStep('askSymptoms');
     } finally {
       setIsLoading(false);
     }
@@ -966,6 +1021,24 @@ Answer in this JSON format: {
                 : 'Send'
               }
             </button>
+            <button
+              onClick={handleUploadClick}
+              disabled={isLoading}
+              className="ml-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition-colors"
+              title="Upload medical document"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+              </svg>
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".pdf,.txt,.csv,.json"
+              className="hidden"
+              disabled={isLoading}
+            />
           </div>
         </div>
       </div>

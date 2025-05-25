@@ -13,6 +13,12 @@ export default defineConfig({
     sourcemap: true,
   },
   optimizeDeps: {
+    include: ['pdfjs-dist'],
     exclude: ['lucide-react'],
+  },
+  resolve: {
+    alias: {
+      'pdfjs-dist': 'pdfjs-dist/build/pdf',
+    },
   },
 });

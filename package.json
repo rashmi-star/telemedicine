@@ -8,16 +8,26 @@
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "server": "json-server --watch db.json --port 3001"
+    "server": "json-server --watch db.json --port 3001",
+    "init:storage": "npx tsx src/utils/initStorage.js",
+    "test:supabase": "npx tsx src/utils/testSupabase.js",
+    "create:bucket": "npx tsx src/utils/createBucket.js",
+    "setup:supabase": "npx tsx src/utils/setupSupabase.js",
+    "check:env": "npx tsx src/utils/checkEnv.js",
+    "direct:bucket": "npx tsx src/utils/directBucket.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.3",
+    "dotenv": "^16.3.1",
     "leaflet": "^1.9.4",
+    "lucide-react": "^0.511.0",
     "node-fetch": "^2.7.0",
+    "pdfjs-dist": "^5.2.133",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-leaflet": "^4.2.1",
-    "react-router-dom": "^6.22.0"
+    "react-router-dom": "^6.22.0",
+    "undici": "^6.21.3"
   },
   "devDependencies": {
     "@types/leaflet": "^1.9.17",

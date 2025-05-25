@@ -108,70 +108,148 @@ export function findMedicationsForSymptoms(
 
 // Function to get medication recommendations based on symptoms
 export function getMedicationRecommendations(
-  medicationData: MedicationData | null,
-  symptoms: string,
-  age?: string,
+  symptomsOrData: string | MedicationData | null,
+  medicationsOrAge?: string,
+  options?: {
+    age?: number;
+    hasRespiratoryCondition?: boolean;
+  } | string,
   conditions?: string[]
 ): { 
   medications: Medication[], 
   warnings: string[] 
 } {
-  console.log(`🔍 Getting medication recommendations for: "${symptoms}", age: ${age || 'not provided'}`);
+  console.log(`🔍 Getting medication recommendations`);
   
-  if (!medicationData) {
-    console.log("❌ No medication data available for recommendations");
-    return { medications: [], warnings: [] };
-  }
+  // Check if we're using the new parameter format
+  if (typeof symptomsOrData === 'string') {
+    // In this case:
+    // symptomsOrData = symptoms string
+    // medicationsOrAge = medications string
+    // options = { age, hasRespiratoryCondition }
+    
+    const symptoms = symptomsOrData;
+    const medications = medicationsOrAge || '';
+    
+    // Parse options
+    let age: number | undefined;
+    let hasRespiratoryCondition = false;
+    
+    if (options && typeof options === 'object') {
+      age = options.age;
+      hasRespiratoryCondition = options.hasRespiratoryCondition || false;
+    }
+    
+    console.log(`🔍 Symptoms: "${symptoms}", Medications: "${medications}", Age: ${age || 'not provided'}`);
+    
+    // Create synthetic medication data for the specified medications
+    const syntheticMedications: Medication[] = medications.split(',').map((med, index) => {
+      const medName = med.trim();
+      if (!medName) return null;
+      
+      return {
+        id: `synth${index}`,
+        name: medName,
+        category: 'Recommended medication',
+        dosageAdult: 'Consult healthcare provider for proper dosage',
+        dosageChild: 'Not recommended for children without medical supervision',
+        safetyNotes: 'Use as directed by healthcare provider',
+        warnings: hasRespiratoryCondition ? 
+          'May need special consideration due to respiratory conditions' : 
+          'Use as directed by healthcare provider',
+        sideEffects: 'Various side effects may occur, consult healthcare provider',
+        contraindications: 'Various contraindications may apply, consult healthcare provider',
+        symptoms: symptoms.toLowerCase().split(/\s+/) // Split by whitespace to create symptom keywords
+      };
+    }).filter(Boolean) as Medication[];
+    
+    // Generate warnings
+    const warnings: string[] = [];
+    
+    if (age && age < 6) {
+      warnings.push("Many medications are not recommended for children under 6 without medical supervision.");
+    } else if (age && age < 12) {
+      warnings.push("Some medications may require special dosing for children under 12. Always check with a healthcare provider.");
+    } else if (age && age > 65) {
+      warnings.push("Older adults may be more sensitive to medication side effects. Consider starting with lower doses.");
+    }
+    
+    if (hasRespiratoryCondition) {
+      warnings.push("Due to your respiratory symptoms and current air quality, use extra caution with medications that may affect breathing.");
+    }
+    
+    return {
+      medications: syntheticMedications,
+      warnings
+    };
+  } else {
+    // Original functionality where first parameter is MedicationData
+    const medicationData = symptomsOrData;
+    const symptoms = medicationsOrAge || '';
+    let age: string | undefined;
+    
+    // Handle the third parameter which could be age or options
+    if (typeof options === 'string') {
+      age = options;
+    }
+    
+    console.log(`🔍 Getting medication recommendations for: "${symptoms}", age: ${age || 'not provided'}`);
+    
+    if (!medicationData) {
+      console.log("❌ No medication data available for recommendations");
+      return { medications: [], warnings: [] };
+    }
 
-  // Find relevant medications
-  const matchedMedications = findMedicationsForSymptoms(medicationData, symptoms);
-  
-  // Additional warnings based on patient factors
-  const warnings: string[] = [];
-  
-  // Age-related warnings
-  if (age) {
-    const numericAge = parseInt(age, 10);
-    if (!isNaN(numericAge)) {
-      if (numericAge < 6) {
-        warnings.push("Many over-the-counter medications are not recommended for children under 6 without medical supervision.");
-      } else if (numericAge < 12) {
-        warnings.push("Some medications may require special dosing for children under 12. Always check with a healthcare provider.");
-      } else if (numericAge > 65) {
-        warnings.push("Older adults may be more sensitive to medication side effects. Consider starting with lower doses.");
+    // Find relevant medications
+    const matchedMedications = findMedicationsForSymptoms(medicationData, symptoms);
+    
+    // Additional warnings based on patient factors
+    const warnings: string[] = [];
+    
+    // Age-related warnings
+    if (age) {
+      const numericAge = parseInt(age, 10);
+      if (!isNaN(numericAge)) {
+        if (numericAge < 6) {
+          warnings.push("Many over-the-counter medications are not recommended for children under 6 without medical supervision.");
+        } else if (numericAge < 12) {
+          warnings.push("Some medications may require special dosing for children under 12. Always check with a healthcare provider.");
+        } else if (numericAge > 65) {
+          warnings.push("Older adults may be more sensitive to medication side effects. Consider starting with lower doses.");
+        }
       }
     }
-  }
-  
-  // Filter out medications that might be contraindicated based on conditions
-  let filteredMedications = matchedMedications;
-  
-  if (conditions && conditions.length > 0) {
-    console.log(`🔍 Checking contraindications against conditions: ${conditions.join(', ')}`);
-    // Look for contraindications in existing conditions
-    const lowercaseConditions = conditions.map(c => c.toLowerCase());
     
-    // Warning for potential contraindications
-    warnings.push("Some medications may not be suitable due to your medical conditions. Always consult with a healthcare provider.");
+    // Filter out medications that might be contraindicated based on conditions
+    let filteredMedications = matchedMedications;
     
-    // Filter medications with potential contraindications
-    filteredMedications = matchedMedications.filter(med => {
-      const contraindications = med.contraindications.toLowerCase();
-      // If any condition appears in contraindications, exclude the medication
-      return !lowercaseConditions.some(condition => 
-        contraindications.includes(condition) ||
-        // Common terms that might indicate a problem
-        (condition.includes("liver") && contraindications.includes("liver")) ||
-        (condition.includes("kidney") && contraindications.includes("kidney")) ||
-        (condition.includes("heart") && contraindications.includes("heart"))
-      );
-    });
+    if (conditions && conditions.length > 0) {
+      console.log(`🔍 Checking contraindications against conditions: ${conditions.join(', ')}`);
+      // Look for contraindications in existing conditions
+      const lowercaseConditions = conditions.map(c => c.toLowerCase());
+      
+      // Warning for potential contraindications
+      warnings.push("Some medications may not be suitable due to your medical conditions. Always consult with a healthcare provider.");
+      
+      // Filter medications with potential contraindications
+      filteredMedications = matchedMedications.filter(med => {
+        const contraindications = med.contraindications.toLowerCase();
+        // If any condition appears in contraindications, exclude the medication
+        return !lowercaseConditions.some(condition => 
+          contraindications.includes(condition) ||
+          // Common terms that might indicate a problem
+          (condition.includes("liver") && contraindications.includes("liver")) ||
+          (condition.includes("kidney") && contraindications.includes("kidney")) ||
+          (condition.includes("heart") && contraindications.includes("heart"))
+        );
+      });
+    }
+    
+    console.log(`✅ Final recommendation: ${filteredMedications.length} medications with ${warnings.length} warnings`);
+    
+    return { 
+      medications: filteredMedications,
+      warnings 
+    };
   }
-  
-  console.log(`✅ Final recommendation: ${filteredMedications.length} medications with ${warnings.length} warnings`);
-  
-  return { 
-    medications: filteredMedications,
-    warnings 
-  };
 } 
