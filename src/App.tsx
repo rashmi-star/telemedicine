@@ -75,6 +75,21 @@ const App: React.FC = () => {
     }
   };
 
+  // Function to check if a route should be redirected
+  const shouldRedirect = (route: string) => {
+    // If user is logged in and trying to access auth pages
+    if (currentUser && ['/login', '/signup', '/'].includes(route)) {
+      return '/documents';
+    }
+    
+    // If user is not logged in and trying to access the root
+    if (!currentUser && route === '/') {
+      return '/login';
+    }
+    
+    return null;
+  };
+
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
@@ -88,14 +103,18 @@ const App: React.FC = () => {
             <Routes>
               {/* Redirect root to login for unauthenticated users or to documents for authenticated users */}
               <Route path="/" element={
-                currentUser ? <Navigate to="/documents" replace /> : <Navigate to="/login" replace />
+                <Navigate to={currentUser ? "/documents" : "/login"} replace />
               } />
+              
+              {/* Public auth routes - accessible only when not logged in */}
               <Route path="/login" element={
                 currentUser ? <Navigate to="/documents" replace /> : <Login />
               } />
               <Route path="/signup" element={
                 currentUser ? <Navigate to="/documents" replace /> : <Signup />
               } />
+              
+              {/* Protected routes - require authentication */}
               <Route path="/profile" element={
                 <ProtectedRoute>
                   <Profile />
@@ -111,9 +130,10 @@ const App: React.FC = () => {
                   <ChatInterface />
                 </ProtectedRoute>
               } />
+              
               {/* Catch all other routes */}
               <Route path="*" element={
-                currentUser ? <Navigate to="/documents" replace /> : <Navigate to="/login" replace />
+                <Navigate to={currentUser ? "/documents" : "/login"} replace />
               } />
             </Routes>
           )}

@@ -12,7 +12,7 @@ export const uploadDocument = async (
   documentType: string = 'medical_document'
 ): Promise<{ success: boolean; data?: any; error?: any; publicUrl?: string }> => {
   try {
-    console.log('Starting simple document upload for user:', userId);
+    console.log('Starting document upload for user:', userId);
     
     // First check if the user is authenticated
     const user = await getCurrentUser();
@@ -28,14 +28,15 @@ export const uploadDocument = async (
       return { success: false, error: bucketError };
     }
     
-    // Create a simplified path
+    // Create a path that includes user ID for better organization
     const timestamp = new Date().getTime();
-    const fileName = `${timestamp}_${file.name}`;
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_'); // Sanitize filename
+    const fileName = `${timestamp}_${sanitizedFileName}`;
     const filePath = `${userId}/${fileName}`;
     
     console.log('Uploading to path:', filePath);
     
-    // Try to upload directly to the 'documents' bucket
+    // Upload to the 'documents' bucket
     const { data, error } = await supabase.storage
       .from('documents')
       .upload(filePath, file, {
@@ -50,12 +51,12 @@ export const uploadDocument = async (
     
     console.log('Upload successful, getting public URL');
     
-    // Get the public URL
-    const { data: urlData } = supabase.storage
+    // Get the public URL - even if the bucket is private, we can still get a signed URL
+    const { data: urlData } = await supabase.storage
       .from('documents')
-      .getPublicUrl(filePath);
+      .createSignedUrl(filePath, 60 * 60 * 24 * 7); // 7 day signed URL
     
-    const publicUrl = urlData?.publicUrl || '';
+    const publicUrl = urlData?.signedUrl || '';
     
     // Store metadata in the database
     const { error: metadataError } = await supabase
@@ -78,9 +79,17 @@ export const uploadDocument = async (
       // Still return success since the file was uploaded
     }
     
+    console.log('Document uploaded successfully with path:', filePath);
+    
     return {
       success: true,
-      data,
+      data: {
+        ...data,
+        filePath,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      },
       publicUrl
     };
   } catch (error) {
@@ -95,6 +104,13 @@ export const uploadDocument = async (
 export const getUserDocuments = async (userId: string) => {
   try {
     console.log('Fetching documents for user:', userId);
+    
+    // First check if the user is authenticated
+    const user = await getCurrentUser();
+    if (!user) {
+      console.error('User not authenticated');
+      return { success: false, error: new Error('Authentication required to fetch documents'), data: [] };
+    }
     
     const { data, error } = await supabase
       .from('user_documents')
@@ -119,6 +135,13 @@ export const getUserDocuments = async (userId: string) => {
  */
 export const deleteDocument = async (documentPath: string, documentId: string) => {
   try {
+    // First check if the user is authenticated
+    const user = await getCurrentUser();
+    if (!user) {
+      console.error('User not authenticated');
+      return { success: false, error: new Error('Authentication required to delete documents') };
+    }
+    
     // Delete the file from storage
     const { error: storageError } = await supabase.storage
       .from('documents')
@@ -126,6 +149,7 @@ export const deleteDocument = async (documentPath: string, documentId: string) =
     
     if (storageError) {
       console.error('Storage deletion error:', storageError);
+      return { success: false, error: storageError };
     }
     
     // Delete the database record

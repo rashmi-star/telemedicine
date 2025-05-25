@@ -1,5 +1,10 @@
 import { supabase } from './supabase';
 
+interface StorageResult {
+  success: boolean;
+  error?: any;
+}
+
 /**
  * Ensures that the storage bucket for documents exists
  * This function can be called during app initialization
@@ -57,21 +62,48 @@ export const createUserFolders = async (userId: string) => {
 /**
  * Setup all required storage structures for the application
  */
-export const initializeStorage = async () => {
+export const initializeStorage = async (): Promise<StorageResult> => {
   try {
-    // Check available buckets
-    const bucketResult = await setupDocumentStorage();
-    if (!bucketResult.success) {
-      console.warn('Could not verify bucket existence:', bucketResult.error);
-      // Continue anyway - we'll handle this during upload
+    console.log('Setting up storage with Supabase');
+    
+    // Verify Supabase connection by checking the current session
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('Session error during storage initialization:', sessionError);
+      return { success: false, error: sessionError };
     }
     
-    return { 
-      success: true,
-      message: "Storage check completed. May require manual bucket creation."
-    };
+    // Create the documents bucket if it doesn't exist
+    const { error: bucketError } = await supabase.storage.createBucket('documents', {
+      public: false,
+      fileSizeLimit: 20971520, // 20MB
+    });
+    
+    // If bucket already exists, this is not an error
+    if (bucketError && !bucketError.message.includes('already exists')) {
+      console.error('Error creating bucket:', bucketError);
+      return { success: false, error: bucketError };
+    }
+    
+    // Note: CORS settings must be configured from the Supabase dashboard
+    // or using the Management API which requires service_role key
+    
+    console.log('Storage setup complete');
+    return { success: true };
   } catch (error) {
-    console.error('Error initializing storage:', error);
+    console.error('Unexpected error during storage initialization:', error);
     return { success: false, error };
+  }
+};
+
+// Helper to check if storage is accessible
+export const checkStorageAccess = async (): Promise<boolean> => {
+  try {
+    const { data } = await supabase.storage.getBucket('documents');
+    return !!data;
+  } catch (error) {
+    console.error('Storage access check failed:', error);
+    return false;
   }
 }; 
