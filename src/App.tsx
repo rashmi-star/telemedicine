@@ -9,13 +9,11 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { User, LogOut, MessageSquare, FolderOpen } from 'lucide-react';
 import { getCurrentUser, signOut } from './utils/authUtils';
 import { initializeStorage } from './utils/setupStorage';
-import { useNavigate } from 'react-router-dom';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userLoading, setUserLoading] = useState(true);
   const [storageInitialized, setStorageInitialized] = useState(false);
-  const navigate = useNavigate();
 
   useEffect(() => {
     const loadUser = async () => {
@@ -71,7 +69,7 @@ const App: React.FC = () => {
     try {
       await signOut();
       setCurrentUser(null);
-      // Redirect to login page 
+      // Redirect to login page
       window.location.href = '/login';
     } catch (error) {
       console.error('Error signing out:', error);
