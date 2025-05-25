@@ -1,0 +1,24 @@
+{
+  "name": "supabase-bucket-creator",
+  "version": "1.0.0",
+  "description": "Securely creates a Supabase storage bucket using service_role key",
+  "main": "createBucket.js",
+  "scripts": {
+    "create-bucket": "node createBucket.js"
+  },
+  "keywords": [
+    "supabase",
+    "storage",
+    "bucket"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.8",
+    "dotenv": "^16.3.1",
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

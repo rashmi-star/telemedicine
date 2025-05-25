@@ -20,66 +20,81 @@ export async function ensureBucketExists(): Promise<{ success: boolean; error: E
     
     console.log('User authenticated:', user.email);
     
-    // Try to access the bucket directly first
-    try {
-      const { data: files, error } = await supabase.storage.from(BUCKET_NAME).list();
-      
-      if (!error) {
-        console.log(`Bucket '${BUCKET_NAME}' exists and is accessible.`);
-        return { success: true, error: null };
-      }
-    } catch (e) {
-      console.log('Error accessing bucket, will try to create it:', e);
-    }
-    
-    // List all buckets
+    // First check if the bucket exists by listing all buckets
     const { data: buckets, error: listError } = await supabase.storage.listBuckets();
     
     if (listError) {
+      // If we can't list buckets, it could be a permissions issue
       console.error('Error listing buckets:', listError);
-      return { success: false, error: listError };
+      
+      // Try to directly access the bucket as a fallback
+      try {
+        const { data: bucketData, error: bucketError } = await supabase.storage.getBucket(BUCKET_NAME);
+        if (!bucketError && bucketData) {
+          console.log(`Bucket '${BUCKET_NAME}' exists and is accessible.`);
+          return { success: true, error: null };
+        }
+      } catch (e) {
+        console.error('Error directly accessing bucket:', e);
+      }
+      
+      // If we still don't have access, try a direct list operation on the bucket
+      try {
+        const { data: files, error: filesError } = await supabase.storage.from(BUCKET_NAME).list();
+        if (!filesError) {
+          console.log(`Bucket '${BUCKET_NAME}' exists and is accessible via list operation.`);
+          return { success: true, error: null };
+        }
+      } catch (e) {
+        console.error('Error listing files in bucket:', e);
+      }
+      
+      // If we've reached here, the bucket likely doesn't exist or we don't have access
+      return { 
+        success: false, 
+        error: new Error(`Cannot access storage bucket '${BUCKET_NAME}'. It may not exist or you don't have permission.`) 
+      };
     }
     
-    // Check if our bucket exists
-    const bucketExists = buckets.some(bucket => bucket.name === BUCKET_NAME);
+    // Check if our bucket exists in the list
+    const bucketExists = buckets && buckets.some(bucket => bucket.name === BUCKET_NAME);
     
     if (!bucketExists) {
       console.log(`Bucket '${BUCKET_NAME}' doesn't exist. Creating it...`);
       
-      // Create the bucket with public access for easier testing
-      const { error: createError } = await supabase.storage.createBucket(BUCKET_NAME, {
-        public: true // Setting to true for easier access
-      });
-      
-      if (createError) {
-        console.error('Error creating bucket:', createError);
-        return { success: false, error: createError };
-      }
-      
-      // Set default RLS policy to allow the current user access
       try {
-        // This step depends on having the right permissions
-        console.log(`Setting up storage policy for user: ${user.id}`);
-        const { error: policyError } = await supabase.rpc('create_storage_policy', {
-          bucket_name: BUCKET_NAME,
-          user_id: user.id
+        // Create the bucket with proper permissions
+        const { error: createError } = await supabase.storage.createBucket(BUCKET_NAME, {
+          public: false, // Keep files private for security
+          fileSizeLimit: 50971520, // 50MB
         });
         
-        if (policyError) {
-          console.error('Error setting bucket policy:', policyError);
-          // Continue anyway, the admin might need to set policies
+        if (createError) {
+          console.error('Error creating bucket:', createError);
+          
+          // If creating the bucket fails, we should inform the user
+          return { 
+            success: false, 
+            error: new Error(`Failed to create storage bucket: ${createError.message}. Please check Supabase credentials and permissions.`) 
+          };
         }
-      } catch (policyErr) {
-        console.error('Failed to set storage policy:', policyErr);
-        // Continue anyway
+        
+        // Set RLS policy for the bucket
+        console.log(`Setting up default access policy for user: ${user.id}`);
+        
+        // Wait a moment for bucket creation to propagate
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        console.log(`Bucket '${BUCKET_NAME}' created successfully.`);
+        return { success: true, error: null };
+      } catch (err) {
+        console.error('Bucket creation error:', err);
+        return { success: false, error: err as Error };
       }
-      
-      console.log(`Bucket '${BUCKET_NAME}' created successfully.`);
     } else {
       console.log(`Bucket '${BUCKET_NAME}' already exists.`);
+      return { success: true, error: null };
     }
-    
-    return { success: true, error: null };
   } catch (error) {
     console.error('Unexpected error ensuring bucket exists:', error);
     return { success: false, error: error as Error };
@@ -277,19 +292,29 @@ export async function uploadTestDocument(): Promise<{ success: boolean; error: E
     // First ensure the bucket exists
     const { success: bucketSuccess, error: bucketError } = await ensureBucketExists();
     if (!bucketSuccess) {
-      return { success: false, error: bucketError };
+      console.error('Bucket access error:', bucketError);
+      return { 
+        success: false, 
+        error: new Error(`Bucket access error: ${bucketError?.message}. Please check your Supabase credentials and permissions.`)
+      };
     }
     
     // Create a small text file for testing
-    const testContent = 'This is a test file to verify Supabase storage access.';
+    const testContent = `This is a test file to verify Supabase storage access.
+User: ${user.email || 'Unknown'}
+Date: ${new Date().toISOString()}
+Random ID: ${Math.random().toString(36).substring(2, 15)}`;
+
     const testBlob = new Blob([testContent], { type: 'text/plain' });
-    const testFile = new File([testBlob], 'test-document.txt', { type: 'text/plain' });
+    const testFile = new File([testBlob], `test-document-${Date.now()}.txt`, { type: 'text/plain' });
     
     // Upload path with user ID to respect RLS policies
-    const filePath = `${user.id}/test-document.txt`;
+    const filePath = `${user.id}/test-document-${Date.now()}.txt`;
+    
+    console.log(`Attempting to upload to path: ${filePath}`);
     
     // Upload the test file
-    const { error } = await supabase.storage
+    const { data, error } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(filePath, testFile, {
         cacheControl: '3600',
@@ -298,13 +323,48 @@ export async function uploadTestDocument(): Promise<{ success: boolean; error: E
     
     if (error) {
       console.error('Test upload error:', error);
-      return { success: false, error };
+      
+      // Provide a more helpful error message based on the error code
+      let errorMessage = error.message;
+      
+      if (error.message.includes('bucket not found')) {
+        errorMessage = `Bucket "${BUCKET_NAME}" not found. Please create it in the Supabase dashboard or check your credentials.`;
+      } else if (error.message.includes('permission denied')) {
+        errorMessage = `Permission denied when uploading to "${BUCKET_NAME}". Please check your RLS policies in Supabase.`;
+      } else if (error.message.includes('authentication')) {
+        errorMessage = `Authentication error. Please log out and log back in, then try again.`;
+      }
+      
+      return { success: false, error: new Error(errorMessage) };
     }
     
-    console.log('Test document uploaded successfully');
+    if (!data) {
+      return { success: false, error: new Error('Upload returned no data but also no error. This is unexpected.') };
+    }
+    
+    console.log('Test document uploaded successfully to:', data.path);
+    
+    // Try to get a signed URL to verify we can also access the file
+    try {
+      const { data: urlData, error: urlError } = await supabase.storage
+        .from(BUCKET_NAME)
+        .createSignedUrl(filePath, 60);
+        
+      if (urlError) {
+        console.warn('Could upload but not create signed URL:', urlError);
+      } else {
+        console.log('Successfully created signed URL');
+      }
+    } catch (e) {
+      console.warn('Error creating signed URL:', e);
+    }
+    
     return { success: true, error: null };
   } catch (error) {
     console.error('Unexpected error during test upload:', error);
-    return { success: false, error: error as Error };
+    return { 
+      success: false, 
+      error: new Error(`Unexpected error during test: ${(error as Error).message}`)
+    };
   }
 } 

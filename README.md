@@ -75,4 +75,35 @@ The medication recommendations provided by MedGuide are for informational purpos
 
 ## License
 
-This project is licensed under the MIT License. 
+This project is licensed under the MIT License.
+
+## Troubleshooting
+
+### "StorageApiError: new row violates row-level security policy"
+
+If you encounter this error when initializing storage, it means your anon key doesn't have permission to create the storage bucket. This is a common issue due to Supabase's Row Level Security (RLS) policies.
+
+To fix this:
+
+1. Make sure your `.env` file has the correct service role key:
+   ```
+   SUPABASE_URL=https://your-project-ref.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+   BUCKET_NAME=documents
+   ```
+
+2. Run the bucket creation script (requires Node.js):
+   ```
+   cd project/scripts
+   npm install @supabase/supabase-js dotenv
+   node run-create-bucket.js
+   ```
+
+3. Alternatively, create the bucket manually in the Supabase dashboard:
+   - Go to Storage in your Supabase dashboard
+   - Click "New Bucket"
+   - Name it "documents"
+   - Click "Create bucket"
+   - Go to the SQL Editor and run the policies from `bucket-policy.sql`
+
+After creating the bucket, restart your application and the error should be resolved. 

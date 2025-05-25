@@ -30,16 +30,21 @@ export const Login: React.FC = () => {
     setLoading(true);
 
     try {
+      console.log('Attempting to sign in with email:', email);
       const { error, data } = await signIn(email, password);
       
       if (error) {
+        console.error('Login error:', error.message);
         setError(error.message);
         showNotification('error', error.message);
+        setLoading(false);
         return;
       }
       
       // Update last login time in profiles table if user exists
       if (data?.user) {
+        console.log('User authenticated successfully:', data.user.id);
+        
         try {
           const { error: profileError } = await supabase
             .from('profiles')
@@ -53,9 +58,13 @@ export const Login: React.FC = () => {
             
           if (profileError) {
             console.error('Error updating profile login time:', profileError);
+            // Continue with login even if profile update fails
+          } else {
+            console.log('User profile updated successfully');
           }
         } catch (profileErr) {
           console.error('Error updating user profile:', profileErr);
+          // Continue with login even if profile update fails
         }
         
         // Show welcome notification
@@ -63,14 +72,19 @@ export const Login: React.FC = () => {
         const username = userEmail.split('@')[0];
         const firstName = username.charAt(0).toUpperCase() + username.slice(1);
         showNotification('success', `Welcome back, ${firstName}!`);
+        
+        // Navigate to documents page after successful login
+        console.log('Navigating to documents page...');
+        navigate('/documents', { replace: true });
+      } else {
+        console.error('No user data returned from login');
+        setError('Login failed. Please try again.');
+        showNotification('error', 'Login failed. Please try again.');
       }
-      
-      // Always redirect to documents page after successful login
-      navigate('/documents', { replace: true });
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Unexpected login error:', err);
       setError('An unexpected error occurred. Please try again.');
       showNotification('error', 'An unexpected error occurred. Please try again.');
-      console.error(err);
     } finally {
       setLoading(false);
     }

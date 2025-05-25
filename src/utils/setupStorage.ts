@@ -3,6 +3,8 @@ import { supabase } from './supabase';
 interface StorageResult {
   success: boolean;
   error?: any;
+  data?: any;
+  message?: string;
 }
 
 /**
@@ -74,23 +76,34 @@ export const initializeStorage = async (): Promise<StorageResult> => {
       return { success: false, error: sessionError };
     }
     
-    // Create the documents bucket if it doesn't exist
-    const { error: bucketError } = await supabase.storage.createBucket('documents', {
-      public: false,
-      fileSizeLimit: 20971520, // 20MB
-    });
+    // Check if the documents bucket exists
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
     
-    // If bucket already exists, this is not an error
-    if (bucketError && !bucketError.message.includes('already exists')) {
-      console.error('Error creating bucket:', bucketError);
-      return { success: false, error: bucketError };
+    if (listError) {
+      console.error('Error listing buckets:', listError);
+      return { success: false, error: listError, message: 'Cannot list buckets - check permissions' };
     }
     
-    // Note: CORS settings must be configured from the Supabase dashboard
-    // or using the Management API which requires service_role key
+    // Check if documents bucket exists
+    const documentsBucket = buckets?.find(bucket => 
+      bucket.id === 'documents' || 
+      bucket.name === 'documents'
+    );
     
+    if (!documentsBucket) {
+      console.warn('Documents bucket not found. You need to create it using the Supabase service role key.');
+      console.warn('Run the script in project/scripts/createBucket.js with appropriate environment variables.');
+      
+      return { 
+        success: false, 
+        message: 'Documents bucket not found',
+        error: new Error('The "documents" bucket does not exist. You need to create it using service role key.') 
+      };
+    }
+    
+    console.log('Documents bucket found:', documentsBucket);
     console.log('Storage setup complete');
-    return { success: true };
+    return { success: true, data: documentsBucket };
   } catch (error) {
     console.error('Unexpected error during storage initialization:', error);
     return { success: false, error };

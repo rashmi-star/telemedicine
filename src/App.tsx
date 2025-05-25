@@ -6,6 +6,7 @@ import { Signup } from './components/Signup';
 import { Profile } from './components/Profile';
 import { Documents } from './components/Documents';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { Navbar } from './components/Navbar';
 import { getCurrentUser, signOut } from './utils/authUtils';
 import { initializeStorage } from './utils/setupStorage';
 
@@ -93,6 +94,7 @@ const App: React.FC = () => {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
+        <Navbar />
         <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
           {userLoading ? (
             // Show loading spinner while checking authentication

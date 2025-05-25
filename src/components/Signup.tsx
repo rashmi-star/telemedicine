@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { signUp } from '../utils/authUtils';
-import { LockKeyhole, Mail, User, ArrowRight, Activity } from 'lucide-react';
+import { LockKeyhole, Mail, Activity } from 'lucide-react';
 import { useNotification } from './Notification';
 import { supabase } from '../utils/supabase';
 
@@ -19,7 +19,8 @@ export const Signup: React.FC = () => {
   const checkSupabaseConnection = async () => {
     setCheckingConnection(true);
     try {
-      const { data, error } = await supabase.from('_health').select('*').limit(1);
+      // Use auth.getSession instead of _health table which may not exist
+      const { data, error } = await supabase.auth.getSession();
       
       if (error) {
         console.error('Supabase connection error:', error);
@@ -28,9 +29,10 @@ export const Signup: React.FC = () => {
         return false;
       }
       
+      console.log('Supabase connection successful');
       return true;
     } catch (err) {
-      console.error('Supabase health check error:', err);
+      console.error('Supabase connection check error:', err);
       setError('Could not verify database connection. Please try again later.');
       showNotification('error', 'Database connection check failed. Please try again later.');
       return false;
@@ -232,7 +234,6 @@ export const Signup: React.FC = () => {
               ) : (
                 <>
                   <span>Create account</span>
-                  <ArrowRight className="ml-2 h-4 w-4" />
                 </>
               )}
             </button>
@@ -253,4 +254,4 @@ export const Signup: React.FC = () => {
       </div>
     </div>
   );
-}; 
+};
