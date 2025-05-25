@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { ChatInterface } from './components/ChatInterface';
 import { Login } from './components/Login';
 import { Signup } from './components/Signup';
@@ -9,6 +9,83 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { User, LogOut, MessageSquare, FolderOpen } from 'lucide-react';
 import { getCurrentUser, signOut } from './utils/authUtils';
 import { initializeStorage } from './utils/setupStorage';
+
+// Simple header component for auth pages
+const AuthHeader: React.FC = () => (
+  <header className="bg-white shadow-sm">
+    <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+      <div className="flex justify-center items-center">
+        <h1 className="text-2xl font-bold text-gray-900">
+          MedGuide: Intelligent Medical Assistant
+        </h1>
+      </div>
+    </div>
+  </header>
+);
+
+// Header with navigation for authenticated users
+const AppHeader: React.FC<{user: any; onSignOut: () => void}> = ({ user, onSignOut }) => (
+  <header className="bg-white shadow-sm">
+    <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-gray-900">
+          MedGuide: Intelligent Medical Assistant
+        </h1>
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4">
+            <Link 
+              to="/profile" 
+              className="flex items-center text-sm font-medium text-gray-700 hover:text-blue-600"
+            >
+              <div className="bg-blue-100 rounded-full p-1 mr-2">
+                <User className="h-5 w-5 text-blue-600" />
+              </div>
+              {user.displayName || user.email}
+            </Link>
+            <button 
+              onClick={onSignOut}
+              className="text-sm font-medium text-red-600 hover:text-red-800 flex items-center"
+            >
+              <LogOut className="h-4 w-4 mr-1" />
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+      <nav className="mt-2">
+        <ul className="flex space-x-6">
+          <li>
+            <Link 
+              to="/documents" 
+              className="flex items-center text-blue-600 hover:text-blue-800 font-medium"
+            >
+              <FolderOpen className="h-4 w-4 mr-1" />
+              My Documents
+            </Link>
+          </li>
+          <li>
+            <Link 
+              to="/chat" 
+              className="flex items-center text-blue-600 hover:text-blue-800 font-medium"
+            >
+              <MessageSquare className="h-4 w-4 mr-1" />
+              Chat Assistant
+            </Link>
+          </li>
+          <li>
+            <Link 
+              to="/profile" 
+              className="flex items-center text-blue-600 hover:text-blue-800 font-medium"
+            >
+              <User className="h-4 w-4 mr-1" />
+              Profile
+            </Link>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+);
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -76,92 +153,23 @@ const App: React.FC = () => {
     }
   };
 
+  // Helper function to determine which header to show
+  const getHeader = () => {
+    if (userLoading) {
+      return null; // No header during loading
+    }
+    
+    if (!currentUser) {
+      return <AuthHeader />;
+    }
+    
+    return <AppHeader user={currentUser} onSignOut={handleSignOut} />;
+  };
+
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center">
-              <h1 className="text-2xl font-bold text-gray-900">
-                  MedGuide: Intelligent Medical Assistant
-              </h1>
-              <div className="flex items-center space-x-4">
-                {!userLoading && (
-                  currentUser ? (
-                    <div className="flex items-center space-x-4">
-                      <Link 
-                        to="/profile" 
-                        className="flex items-center text-sm font-medium text-gray-700 hover:text-blue-600"
-                      >
-                        <div className="bg-blue-100 rounded-full p-1 mr-2">
-                          <User className="h-5 w-5 text-blue-600" />
-                        </div>
-                        {currentUser.displayName || currentUser.email}
-                      </Link>
-                      <button 
-                        onClick={handleSignOut}
-                        className="text-sm font-medium text-red-600 hover:text-red-800 flex items-center"
-                      >
-                        <LogOut className="h-4 w-4 mr-1" />
-                        Sign Out
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center space-x-4">
-                      <Link 
-                        to="/login" 
-                        className="text-sm font-medium text-blue-600 hover:text-blue-800"
-                      >
-                        Log in
-                      </Link>
-                      <Link 
-                        to="/signup" 
-                        className="text-sm font-medium text-white bg-blue-600 px-3 py-2 rounded-md hover:bg-blue-700"
-                      >
-                        Sign up
-                      </Link>
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-            <nav className="mt-2">
-              <ul className="flex space-x-6">
-                {currentUser && (
-                  <li>
-                    <Link 
-                      to="/documents" 
-                      className="flex items-center text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      <FolderOpen className="h-4 w-4 mr-1" />
-                      My Documents
-                    </Link>
-                  </li>
-                )}
-                <li>
-                  <Link 
-                    to="/" 
-                    className="flex items-center text-blue-600 hover:text-blue-800 font-medium"
-                  >
-                    <MessageSquare className="h-4 w-4 mr-1" />
-                    Chat Assistant
-                  </Link>
-                </li>
-                {currentUser && (
-                  <li>
-                    <Link 
-                      to="/profile" 
-                      className="flex items-center text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      <User className="h-4 w-4 mr-1" />
-                      Profile
-                    </Link>
-                  </li>
-                )}
-              </ul>
-            </nav>
-          </div>
-        </header>
+        {getHeader()}
 
         <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
           {userLoading ? (
