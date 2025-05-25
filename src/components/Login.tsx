@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { signIn } from '../utils/authUtils';
 import { LockKeyhole, Mail, ArrowRight } from 'lucide-react';
 import { useNotification } from './Notification';
@@ -65,8 +65,8 @@ export const Login: React.FC = () => {
         showNotification('success', `Welcome back, ${firstName}!`);
       }
       
-      // Redirect to the original requested page or home
-      navigate(from, { replace: true });
+      // Always redirect to documents page after successful login
+      navigate('/documents', { replace: true });
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
       showNotification('error', 'An unexpected error occurred. Please try again.');
@@ -154,12 +154,12 @@ export const Login: React.FC = () => {
         <div className="mt-4 text-center">
           <p className="text-sm text-gray-600">
             Don't have an account?{' '}
-            <a 
-              href="/signup" 
+            <Link 
+              to="/signup" 
               className="font-medium text-blue-600 hover:text-blue-500"
             >
               Sign up
-            </a>
+            </Link>
           </p>
         </div>
       </div>

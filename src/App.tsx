@@ -9,11 +9,13 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { User, LogOut, MessageSquare, FolderOpen } from 'lucide-react';
 import { getCurrentUser, signOut } from './utils/authUtils';
 import { initializeStorage } from './utils/setupStorage';
+import { useNavigate } from 'react-router-dom';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userLoading, setUserLoading] = useState(true);
   const [storageInitialized, setStorageInitialized] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const loadUser = async () => {
@@ -69,7 +71,8 @@ const App: React.FC = () => {
     try {
       await signOut();
       setCurrentUser(null);
-      window.location.href = '/';
+      // Redirect to login page 
+      window.location.href = '/login';
     } catch (error) {
       console.error('Error signing out:', error);
     }
@@ -163,33 +166,44 @@ const App: React.FC = () => {
         </header>
 
         <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-          <Routes>
-            {/* Redirect root to login for unauthenticated users or to documents for authenticated users */}
-            <Route path="/" element={
-              currentUser ? <ChatInterface /> : <Navigate to="/login" replace />
-            } />
-            <Route path="/login" element={
-              currentUser ? <Navigate to="/documents" replace /> : <Login />
-            } />
-            <Route path="/signup" element={
-              currentUser ? <Navigate to="/documents" replace /> : <Signup />
-            } />
-            <Route path="/profile" element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            } />
-            <Route path="/documents" element={
-              <ProtectedRoute>
-                <Documents />
-              </ProtectedRoute>
-            } />
-            <Route path="/chat" element={<ChatInterface />} />
-            {/* Catch all other routes */}
-            <Route path="*" element={
-              currentUser ? <Navigate to="/documents" replace /> : <Navigate to="/login" replace />
-            } />
-          </Routes>
+          {userLoading ? (
+            // Show loading spinner while checking authentication
+            <div className="flex justify-center items-center min-h-[300px]">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          ) : (
+            <Routes>
+              {/* Redirect root to login for unauthenticated users or to documents for authenticated users */}
+              <Route path="/" element={
+                currentUser ? <Navigate to="/documents" replace /> : <Navigate to="/login" replace />
+              } />
+              <Route path="/login" element={
+                currentUser ? <Navigate to="/documents" replace /> : <Login />
+              } />
+              <Route path="/signup" element={
+                currentUser ? <Navigate to="/documents" replace /> : <Signup />
+              } />
+              <Route path="/profile" element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              } />
+              <Route path="/documents" element={
+                <ProtectedRoute>
+                  <Documents />
+                </ProtectedRoute>
+              } />
+              <Route path="/chat" element={
+                <ProtectedRoute>
+                  <ChatInterface />
+                </ProtectedRoute>
+              } />
+              {/* Catch all other routes */}
+              <Route path="*" element={
+                currentUser ? <Navigate to="/documents" replace /> : <Navigate to="/login" replace />
+              } />
+            </Routes>
+          )}
         </main>
 
         <footer className="bg-white border-t border-gray-200">

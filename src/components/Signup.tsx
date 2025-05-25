@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { signUp } from '../utils/authUtils';
 import { LockKeyhole, Mail, User, ArrowRight, CheckCircle } from 'lucide-react';
 import { useNotification } from './Notification';
@@ -122,7 +122,7 @@ export const Signup: React.FC = () => {
   };
 
   const goToDashboard = () => {
-    navigate('/dashboard');
+    navigate('/documents');
   };
 
   if (signupComplete) {
@@ -268,12 +268,12 @@ export const Signup: React.FC = () => {
         <div className="mt-4 text-center">
           <p className="text-sm text-gray-600">
             Already have an account?{' '}
-            <a 
-              href="/login" 
+            <Link 
+              to="/login" 
               className="font-medium text-blue-600 hover:text-blue-500"
             >
               Log in
-            </a>
+            </Link>
           </p>
         </div>
       </div>
